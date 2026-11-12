@@ -29,12 +29,12 @@ HTTP Client / Postman / Frontend
 
 ### Layer Responsibilities
 
-- **Routes (`src/routes/`)**: Map HTTP paths and methods to controller handlers and validation middleware. Strictly contain no business logic or SQL.
-- **Controllers (`src/controllers/`)**: Thin handlers. Extract request bodies, route parameters, and query strings. Call domain services and format HTTP responses.
-- **Services (`src/services/`)**: Enforce business rules (e.g., date interval validations, stay price calculations, booking state transitions). Coordinate database repositories and external integrations. Do not depend on Express `req`/`res`.
-- **Repositories (`src/repositories/`)**: Manage database access using parameterized queries via `pg`. Decoupled from HTTP context and business decisions.
-- **Integrations (`src/integrations/`)**: Outbound adapters wrapping third-party APIs (Cloudinary, external OTP & Notification Microservice).
-- **Middleware (`src/middleware/`)**: Centralized error handling, request logging with distributed tracing IDs (`x-request-id`), schema validation, and 404 handling.
+- **Routes (`src/routes/`, `src/modules/auth/auth.routes.js`)**: Map HTTP paths and methods to controller handlers and validation middleware. Strictly contain no business logic or SQL.
+- **Controllers (`src/controllers/`, `src/modules/auth/auth.controller.js`)**: Thin handlers. Extract request bodies, route parameters, and query strings. Call domain services and format HTTP responses.
+- **Services (`src/services/`, `src/modules/auth/auth.service.js`)**: Enforce business rules (e.g., date interval validations, stay price calculations, passwordless auth logic). Coordinate database repositories and external integrations. Do not depend on Express `req`/`res`.
+- **Repositories (`src/repositories/`, `src/modules/auth/auth.repository.js`)**: Manage database access using parameterized queries via `pg`. Decoupled from HTTP context and business decisions.
+- **Integrations (`src/integrations/`)**: Outbound adapters wrapping third-party APIs (Cloudinary, external live OTP & Notification Microservice).
+- **Middleware (`src/middleware/`)**: Centralized error handling, request logging with distributed tracing IDs (`x-request-id`), schema validation, rate limiting, CSRF protection, and 404 handling.
 
 ---
 
@@ -56,10 +56,20 @@ server/
 │   │   ├── bookingStatus.js            # Booking state machine constants
 │   │   └── errorMessages.js            # Machine-readable error codes & client messages
 │   │
-│   ├── controllers/                    # HTTP request & response orchestrators
+│   ├── controllers/                    # General domain HTTP request & response handlers
 │   │   ├── hotel.controller.js         # Hotel listing and details endpoints
 │   │   ├── room.controller.js          # Room categories and availability quotes
 │   │   └── booking.controller.js       # Booking creation, lookup, and cancellation
+│   │
+│   ├── modules/
+│   │   └── auth/                       # Customer Authentication Domain Module
+│   │       ├── auth.routes.js          # /api/auth endpoints (send-otp, verify-otp, me, logout)
+│   │       ├── auth.controller.js      # HTTP controller mapping for auth endpoints
+│   │       ├── auth.service.js         # Registration/login business logic & session handling
+│   │       ├── auth.repository.js      # PostgreSQL queries for customers & auth_sessions
+│   │       ├── auth.validation.js      # Zod validation schemas for OTP payloads
+│   │       ├── auth.middleware.js      # requireAuth middleware checking JWT + active session
+│   │       └── auth.cookies.js         # HttpOnly cookie helpers (setAuthCookie, clearAuthCookie)
 │   │
 │   ├── services/                       # Core domain business logic
 │   │   ├── hotel.service.js            # Catalog discovery & fallback dataset loader
@@ -76,28 +86,33 @@ server/
 │   │   ├── hotel.routes.js             # /api/v1/hotels endpoints
 │   │   ├── room.routes.js              # /api/v1/room-types endpoints
 │   │   ├── booking.routes.js           # /api/v1/bookings endpoints
-│   │   └── index.js                    # Aggregated router mount
+│   │   └── index.js                    # Aggregated domain router mount
 │   │
 │   ├── middleware/                     # Cross-cutting Express middleware
 │   │   ├── error.middleware.js         # Centralized error handler & AppError class
 │   │   ├── notFound.middleware.js      # 404 Not Found handler
 │   │   ├── validate.middleware.js      # Zod request validation middleware
+│   │   ├── rateLimiter.middleware.js   # Sliding-window in-memory rate limiter for OTP endpoints
+│   │   ├── csrf.middleware.js          # CSRF double-submit token verification
 │   │   └── requestLogger.middleware.js # Request ID generator & Morgan HTTP logger
 │   │
-│   ├── validators/                     # Request payload and query Zod schemas
+│   ├── validators/                     # General domain Zod schemas
 │   │   ├── hotel.validator.js          # Hotel search & filter schemas
 │   │   ├── room.validator.js           # Room availability query schema
 │   │   └── booking.validator.js        # Booking create, lookup, and cancel schemas
 │   │
 │   ├── integrations/                   # External microservice & provider clients
+│   │   ├── otp/
+│   │   │   └── otpClient.js            # Live adapter for external OTP Microservice
 │   │   ├── cloudinary/
 │   │   │   └── cloudinary.service.js   # Cloudinary image upload and deletion
 │   │   └── notification/
-│   │       └── notification.client.js  # External OTP & Notification HTTP client
+│   │       └── notification.client.js  # External notification microservice email client
 │   │
 │   ├── database/                       # Database connection and data seeding
 │   │   ├── connection.js               # pg.Pool instance & health-check runner
 │   │   ├── migrations/                 # Versioned SQL migration scripts
+│   │   │   └── 001_create_customers_and_auth_sessions.sql
 │   │   └── seeds/
 │   │       ├── data/
 │   │       │   └── hotels.json         # Fictional dataset (5 detailed sample hotels)
@@ -107,19 +122,25 @@ server/
 │       ├── apiResponse.js              # Consistent { success, data, requestId } formatter
 │       ├── asyncHandler.js             # Promise-to-next wrapper for controllers
 │       ├── dateUtils.js                # Calendar stay date & night calculation logic
-│       └── generateBookingReference.js # Collision-resistant booking reference generator
+│       ├── generateBookingReference.js # Collision-resistant booking reference generator
+│       ├── jwt.js                      # Cryptographic JWT signing & strict verification
+│       └── normalizeEmail.js           # Email lower-casing & trimming utility
 │
-├── tests/                              # Automated test suites
+├── tests/                              # Automated test suites (37 passing tests)
 │   ├── fixtures/
 │   │   └── sampleHotel.json            # Mock dataset for test isolation
 │   ├── unit/
-│   │   ├── dateUtils.test.js           # Unit tests for calendar interval logic
+│   │   ├── auth.jwt.test.js            # JWT signing, claims, expiration, and secret tests
+│   │   ├── auth.service.test.js        # Registration, login, duplicate check, and session tests
+│   │   ├── dateUtils.test.js           # Calendar stay date arithmetic tests
 │   │   └── generateBookingReference.test.js
 │   └── integration/
+│       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, logout, CSRF)
 │       └── health.test.js              # Health-check & core route integration tests
 │
 ├── postman/
-│   └── README.md                       # Postman endpoint catalog & request templates
+│   ├── Customer_Authentication.postman_collection.json # Complete Postman test collection
+│   └── README.md                       # Postman testing guide & CSRF cookie instructions
 │
 ├── .env.example                        # Environment variable documentation template
 ├── .gitignore                          # Git ignore rules
@@ -129,73 +150,78 @@ server/
 
 ---
 
-## 3. Getting Started
+## 3. Customer Authentication System (Phase 1)
 
-### Prerequisites
-- Node.js (v18.0.0 or higher, tested with Node 24)
-- npm (v9.0.0 or higher)
-- PostgreSQL (v14 or higher, optional during initialization phase)
+### Overview
+Passwordless authentication using email One-Time Passwords (OTP). No passwords are used or stored.
+
+### Endpoints
+* **`POST /api/auth/send-otp`**
+  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe" }`
+  - **Login payload:** `{ "email": "customer@example.com" }`
+  - Returns a generic message to prevent email enumeration attacks:
+    `"If the email address is valid, a one-time verification code has been dispatched."`
+  - Rate limited to 5 requests per 10 minutes per IP/email.
+* **`POST /api/auth/verify-otp`**
+  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe", "otp": "123456" }`
+  - **Login payload:** `{ "email": "customer@example.com", "otp": "123456" }`
+  - Upon successful verification:
+    - New customer: created in `customers` table with `status = 'ACTIVE'`, `email_verified_at = NOW()`.
+    - Existing customer: updates `last_login_at = NOW()`.
+    - Generates an `auth_sessions` record in PostgreSQL.
+    - Signs a JWT and stores it in an `HttpOnly` cookie (`auth_token`).
+    - Issues a CSRF cookie (`csrf_token`) for the client.
+* **`GET /api/auth/me`**
+  - Authenticated via `HttpOnly` cookie.
+  - Verifies JWT signature, expiration, issuer, audience, and algorithm.
+  - Verifies session row in `auth_sessions` (`revoked_at IS NULL` and `expires_at > NOW()`).
+  - Verifies customer `status = 'ACTIVE'`.
+  - Returns customer profile without leaking internal session secrets.
+* **`POST /api/auth/logout`**
+  - Revokes session in PostgreSQL (`revoked_at = NOW()`).
+  - Clears `auth_token` cookie using identical attributes.
+  - Enforces CSRF token check (`x-csrf-token`).
+
+### External OTP Microservice Integration
+The backend communicates directly with your deployed OTP microservice:
+* **Base URL:** `https://otp-microservise.vercel.app`
+* **Send Endpoint:** `POST /api/send-otp` with `{ email }`
+* **Verify Endpoint:** `POST /api/verify-otp` with `{ email, otp }`
+* **Email Endpoint:** `POST /api/send-email` with `{ to, subject, html, text }`
+
+---
+
+## 4. Getting Started
 
 ### Installation
-
-Navigate to the `server/` directory and install project dependencies:
-
 ```bash
 cd server
 npm install
 ```
 
 ### Environment Configuration
-
-Copy the example configuration to a local `.env` file:
-
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
+Configure your local PostgreSQL credentials:
+```env
+PORT=5000
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/hotel_booking_portal
+JWT_SECRET=your_super_secret_jwt_key_at_least_32_characters_long
+FRONTEND_ORIGIN=http://localhost:5173
+OTP_SERVICE_BASE_URL=https://otp-microservise.vercel.app
+```
 
-Update `.env` with your local PostgreSQL credentials and Cloudinary / Notification service keys when available.
-
----
-
-## 4. Running the Application
-
-### Development Mode (with hot-reload via nodemon)
+### Running the Application
 ```bash
+# Development mode (with nodemon)
 npm run dev
-```
 
-### Production Mode
-```bash
+# Production mode
 npm start
-```
 
-### Running Automated Tests (Node.js built-in test runner)
-```bash
+# Automated test suite (37 tests across 6 suites)
 npm test
 ```
-
----
-
-## 5. Foundational Integrations & Placeholders
-
-1. **PostgreSQL Database (`src/database/connection.js`)**:
-   - Uses `pg.Pool` with connection pooling, idle timeouts, and automatic error handling.
-   - Provides a non-blocking health check `checkDatabaseConnection()`. If PostgreSQL is not running locally, the server gracefully boots in fallback mode using the local `hotels.json` seed dataset.
-   - Migration scripts will be created in `src/database/migrations/` once the final database schema is approved by the evaluator.
-
-2. **Cloudinary Integration (`src/integrations/cloudinary/cloudinary.service.js`)**:
-   - Reusable helper for hotel and room image uploads.
-   - Database stores only image URLs and Cloudinary public IDs (no image binaries in PostgreSQL).
-
-3. **External OTP & Notification Microservice (`src/integrations/notification/notification.client.js`)**:
-   - Dedicated HTTP client adapter using `axios`.
-   - Methods (`requestEmailOtp`, `verifyEmailOtp`, `resendOtp`, `sendBookingConfirmation`, `sendBookingCancellation`) are structured with clear placeholder logic awaiting the external microservice's API specifications.
-
----
-
-## 6. Scope Boundaries
-
-This backend is strictly tailored to a customer-facing hotel booking assignment:
-- **No Admin Panel / Admin Auth**: Catalogue data is seeded via database scripts.
-- **No Online Payment Gateway**: Pricing is authoritative and calculated server-side; payment processing is explicitly excluded.
-- **Single Room per Booking**: Focuses on core transactional correctness and concurrency safety.
