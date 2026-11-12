@@ -1,8 +1,8 @@
 import { roomRepository } from '../repositories/room.repository.js';
+import { hotelRepository } from '../repositories/hotel.repository.js';
 import { calculateNights, validateStayDates } from '../utils/dateUtils.js';
 import { AppError } from '../middleware/error.middleware.js';
 import { ERROR_CODES, ERROR_MESSAGES } from '../constants/errorMessages.js';
-import { loadSeedData } from '../database/seeds/seed.js';
 
 /**
  * Room Domain Business Service
@@ -10,20 +10,29 @@ import { loadSeedData } from '../database/seeds/seed.js';
  */
 export class RoomService {
   /**
-   * Retrieves all room categories for a given hotel
-   * @param {string} hotelId
+   * Retrieves all active room categories for a given hotel
+   * Validates hotel existence (throws 404 if hotel is unknown or inactive).
+   *
+   * @param {string} hotelIdentifier - Hotel UUID or slug
    * @returns {Promise<Array<object>>}
    */
-  async getRoomsByHotel(hotelId) {
-    const rooms = await roomRepository.findByHotelId(hotelId);
-    if (rooms && rooms.length > 0) {
-      return rooms;
+  async getRoomsByHotel(hotelIdentifier) {
+    if (!hotelIdentifier) {
+      throw new AppError(ERROR_CODES.VALIDATION_ERROR, 'Hotel identifier is required.', 400);
     }
 
-    // Foundational fallback to seed dataset
-    const seedHotels = await loadSeedData();
-    const hotel = seedHotels.find((h) => h.id === hotelId);
-    return hotel ? hotel.roomCategories : [];
+    // Validate hotel existence & active status
+    const hotel = await hotelRepository.findById(hotelIdentifier);
+    if (!hotel || !hotel.is_active) {
+      throw new AppError(
+        ERROR_CODES.HOTEL_NOT_FOUND,
+        ERROR_MESSAGES[ERROR_CODES.HOTEL_NOT_FOUND],
+        404
+      );
+    }
+
+    const rooms = await roomRepository.findByHotelId(hotelIdentifier);
+    return rooms;
   }
 
   /**
@@ -41,20 +50,8 @@ export class RoomService {
 
     const nights = calculateNights(checkIn, checkOut);
 
-    // Look up room category to retrieve authoritative server-side nightly price
-    let room = await roomRepository.findById(roomTypeId);
-    if (!room) {
-      const seedHotels = await loadSeedData();
-      for (const h of seedHotels) {
-        const found = h.roomCategories.find((r) => r.id === roomTypeId);
-        if (found) {
-          room = found;
-          break;
-        }
-      }
-    }
-
-    if (!room) {
+    const room = await roomRepository.findById(roomTypeId);
+    if (!room || !room.active) {
       throw new AppError(
         ERROR_CODES.ROOM_NOT_FOUND,
         ERROR_MESSAGES[ERROR_CODES.ROOM_NOT_FOUND],
@@ -73,7 +70,7 @@ export class RoomService {
       nights,
       pricePerNight: nightlyRate,
       totalAmount,
-      available: true, // Baseline availability in foundational phase
+      available: true,
     };
   }
 }

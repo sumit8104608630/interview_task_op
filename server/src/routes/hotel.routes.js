@@ -4,38 +4,30 @@ import { roomController } from '../controllers/room.controller.js';
 import { validate } from '../middleware/validate.middleware.js';
 import {
   getHotelsQuerySchema,
-  searchHotelsQuerySchema,
   hotelIdParamSchema,
 } from '../validators/hotel.validator.js';
 
 const router = Router();
 
 /**
- * @route   GET /api/v1/hotels/search
- * @desc    Search hotels by destination, check-in, check-out dates
- * @access  Public
- */
-router.get('/search', validate({ query: searchHotelsQuerySchema }), hotelController.searchHotels);
-
-/**
- * @route   GET /api/v1/hotels
- * @desc    List hotels with optional city filtering and pagination
+ * @route   GET /api/hotels
+ * @desc    List active hotels with pagination, city/location filters, and sorting
  * @access  Public
  */
 router.get('/', validate({ query: getHotelsQuerySchema }), hotelController.listHotels);
 
 /**
- * @route   GET /api/v1/hotels/:hotelId
- * @desc    Get detailed hotel information by ID
+ * @route   GET /api/hotels/:id
+ * @desc    Get detailed hotel information by UUID or slug
  * @access  Public
  */
-router.get('/:hotelId', validate({ params: hotelIdParamSchema }), hotelController.getHotelById);
+router.get('/:id', validate({ params: hotelIdParamSchema }), hotelController.getHotelById);
 
 /**
- * @route   GET /api/v1/hotels/:hotelId/rooms
- * @desc    Get all room types for a specific hotel
+ * @route   GET /api/hotels/:id/rooms
+ * @desc    Get all active room types for a specific hotel
  * @access  Public
  */
-router.get('/:hotelId/rooms', validate({ params: hotelIdParamSchema }), roomController.getRoomsByHotel);
+router.get('/:id/rooms', validate({ params: hotelIdParamSchema }), roomController.getRoomsByHotel);
 
 export default router;

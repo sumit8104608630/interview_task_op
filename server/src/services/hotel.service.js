@@ -1,83 +1,69 @@
 import { hotelRepository } from '../repositories/hotel.repository.js';
-import { loadSeedData } from '../database/seeds/seed.js';
 import { AppError } from '../middleware/error.middleware.js';
 import { ERROR_CODES, ERROR_MESSAGES } from '../constants/errorMessages.js';
 
 /**
  * Hotel Domain Business Service
- * Encapsulates catalog discovery, location filtering, and property details.
+ * Encapsulates catalog discovery, location filtering, sorting, pagination, and property details.
  */
 export class HotelService {
   /**
-   * Retrieves hotels with optional city filtering and pagination
+   * Retrieves active hotels with filtering, sorting, and pagination
+   *
    * @param {object} params
+   * @param {string} [params.locationId]
    * @param {string} [params.city]
    * @param {number} [params.page=1]
    * @param {number} [params.limit=10]
-   * @returns {Promise<{ hotels: Array<object>, total: number, page: number, limit: number }>}
+   * @param {'name'|'price'|'created_at'} [params.sortBy='name']
+   * @param {'asc'|'desc'} [params.sortOrder='asc']
+   * @returns {Promise<{ hotels: Array<object>, total: number, page: number, limit: number, totalPages: number }>}
    */
-  async getHotels({ city, page = 1, limit = 10 } = {}) {
-    try {
-      // Primary: Attempt repository retrieval
-      const repoResult = await hotelRepository.findAll({
-        city,
-        limit,
-        offset: (page - 1) * limit,
-      });
+  async getHotels({
+    locationId,
+    city,
+    page = 1,
+    limit = 10,
+    sortBy = 'name',
+    sortOrder = 'asc',
+  } = {}) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
 
-      if (repoResult && repoResult.hotels.length > 0) {
-        return {
-          ...repoResult,
-          page,
-          limit,
-        };
-      }
+    const result = await hotelRepository.findAll({
+      locationId: locationId?.trim() || null,
+      city: city?.trim() || null,
+      page: safePage,
+      limit: safeLimit,
+      sortBy: ['name', 'price', 'created_at'].includes(sortBy) ? sortBy : 'name',
+      sortOrder: sortOrder?.toLowerCase() === 'desc' ? 'desc' : 'asc',
+    });
 
-      // Foundational fallback: Serve from local seed dataset if database has not yet been seeded
-      const fallbackData = await loadSeedData();
-      let filtered = fallbackData;
-      if (city) {
-        filtered = filtered.filter((h) =>
-          h.location.city.toLowerCase().includes(city.toLowerCase())
-        );
-      }
+    const totalPages = Math.ceil(result.total / safeLimit) || 1;
 
-      const startIndex = (page - 1) * limit;
-      const paginated = filtered.slice(startIndex, startIndex + limit);
-
-      return {
-        hotels: paginated,
-        total: filtered.length,
-        page,
-        limit,
-      };
-    } catch (error) {
-      console.warn('[HotelService.getHotels] Database unavailable, reading from seed dataset:', error.message);
-      const fallbackData = await loadSeedData();
-      return {
-        hotels: fallbackData.slice(0, limit),
-        total: fallbackData.length,
-        page,
-        limit,
-      };
-    }
+    return {
+      hotels: result.hotels,
+      total: result.total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages,
+    };
   }
 
   /**
-   * Retrieves complete details for a single hotel by ID
-   * @param {string} hotelId
+   * Retrieves complete details for a single active hotel by UUID or slug
+   * Throws 404 if hotel is unknown or inactive.
+   *
+   * @param {string} hotelIdentifier - UUID or slug
    * @returns {Promise<object>}
    */
-  async getHotelById(hotelId) {
-    const hotel = await hotelRepository.findById(hotelId);
-    if (hotel) {
-      return hotel;
+  async getHotelById(hotelIdentifier) {
+    if (!hotelIdentifier) {
+      throw new AppError(ERROR_CODES.VALIDATION_ERROR, 'Hotel identifier is required.', 400);
     }
 
-    // Fallback to seed dataset during initialization phase
-    const seedHotels = await loadSeedData();
-    const found = seedHotels.find((h) => h.id === hotelId);
-    if (!found) {
+    const hotel = await hotelRepository.findById(hotelIdentifier.trim());
+    if (!hotel || !hotel.isActive) {
       throw new AppError(
         ERROR_CODES.HOTEL_NOT_FOUND,
         ERROR_MESSAGES[ERROR_CODES.HOTEL_NOT_FOUND],
@@ -85,29 +71,7 @@ export class HotelService {
       );
     }
 
-    return found;
-  }
-
-  /**
-   * Searches hotels for a given destination and stay interval
-   * @param {object} params
-   * @param {string} params.destination
-   * @param {string} params.checkIn
-   * @param {string} params.checkOut
-   * @param {number} [params.guests=1]
-   * @returns {Promise<Array<object>>}
-   */
-  async searchHotels({ destination, checkIn, checkOut, guests = 1 }) {
-    // In full implementation, verifies date availability against room_inventory
-    const allHotels = await loadSeedData();
-    const queryTerm = destination.toLowerCase();
-
-    return allHotels.filter(
-      (h) =>
-        h.location.city.toLowerCase().includes(queryTerm) ||
-        h.location.state.toLowerCase().includes(queryTerm) ||
-        h.name.toLowerCase().includes(queryTerm)
-    );
+    return hotel;
   }
 }
 

@@ -82,8 +82,11 @@ export const createApp = () => {
   app.use('/api/auth', authRoutes);
   app.use(`${env.API_PREFIX}/auth`, authRoutes);
 
-  // 8. General Domain API Routes (/api/v1)
-  app.use(env.API_PREFIX, apiRoutes);
+  // 8. General Domain API Routes (/api and /api/v1 for complete compatibility)
+  app.use('/api', apiRoutes);
+  if (env.API_PREFIX && env.API_PREFIX !== '/api') {
+    app.use(env.API_PREFIX, apiRoutes);
+  }
 
   // 9. 404 Catch-All Handler
   app.use(notFound);

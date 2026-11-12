@@ -1,0 +1,214 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+    "name": "Hotel Booking Portal - Hotel Catalogue",
+    "description": "Postman API collection for Phase 2: Hotel Catalogue Management APIs (Hotels, Locations, Room Types, Amenities, and Image URLs).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "sampleHotelId",
+      "value": "b4be4e93-6b2c-5fa7-aa09-ad72b3f341a7",
+      "type": "string"
+    },
+    {
+      "key": "sampleLocationId",
+      "value": "5bbd759d-659e-5a8c-8aa5-03abda3c0e07",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. List All Active Hotels",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"]
+        },
+        "description": "Retrieves paginated active hotels with location details, Unsplash images, amenities, and room category summaries."
+      }
+    },
+    {
+      "name": "2. Paginate Hotels (Page 2, Limit 10)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels?page=2&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"],
+          "query": [
+            { "key": "page", "value": "2" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Demonstrates server-side pagination with total, page, limit, and totalPages metadata."
+      }
+    },
+    {
+      "name": "3. Filter Hotels by City (Mumbai)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels?city=Mumbai",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"],
+          "query": [
+            { "key": "city", "value": "Mumbai" }
+          ]
+        },
+        "description": "Case-insensitive substring search for hotels located in Mumbai."
+      }
+    },
+    {
+      "name": "4. Filter Hotels by Location ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels?locationId={{sampleLocationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"],
+          "query": [
+            { "key": "locationId", "value": "{{sampleLocationId}}" }
+          ]
+        },
+        "description": "Filters hotels strictly belonging to a specific location UUID."
+      }
+    },
+    {
+      "name": "5. Sort Hotels by Price (Ascending)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels?sortBy=price&sortOrder=asc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"],
+          "query": [
+            { "key": "sortBy", "value": "price" },
+            { "key": "sortOrder", "value": "asc" }
+          ]
+        },
+        "description": "Sorts hotels from lowest to highest starting room price."
+      }
+    },
+    {
+      "name": "6. Sort Hotels by Price (Descending)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels?sortBy=price&sortOrder=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels"],
+          "query": [
+            { "key": "sortBy", "value": "price" },
+            { "key": "sortOrder", "value": "desc" }
+          ]
+        },
+        "description": "Sorts hotels from highest to lowest starting room price."
+      }
+    },
+    {
+      "name": "7. Get Hotel Details by UUID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/{{sampleHotelId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "{{sampleHotelId}}"]
+        },
+        "description": "Retrieves comprehensive details for a single active hotel including images, amenities, and room categories."
+      }
+    },
+    {
+      "name": "8. Get Hotel Details by Slug",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/grand-residency-mumbai-001",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "grand-residency-mumbai-001"]
+        },
+        "description": "Retrieves single hotel details using its human-readable SEO slug."
+      }
+    },
+    {
+      "name": "9. Get Hotel Room Categories",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/{{sampleHotelId}}/rooms",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "{{sampleHotelId}}", "rooms"]
+        },
+        "description": "Returns active room types, pricing, and guest capacity belonging to the hotel."
+      }
+    },
+    {
+      "name": "10. List All Locations",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/locations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "locations"]
+        },
+        "description": "Returns all available hotel locations (cities, states, countries) with active hotel counts."
+      }
+    },
+    {
+      "name": "11. Get Single Location Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/locations/{{sampleLocationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "locations", "{{sampleLocationId}}"]
+        },
+        "description": "Returns location details for a specific UUID or city name."
+      }
+    },
+    {
+      "name": "12. List All Amenities",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/amenities",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "amenities"]
+        },
+        "description": "Returns the complete catalog of hotel amenities (Wi-Fi, Pool, Spa, etc.)."
+      }
+    },
+    {
+      "name": "13. Unknown Hotel 404 Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/00000000-0000-0000-0000-000000000000",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "00000000-0000-0000-0000-000000000000"]
+        },
+        "description": "Verifies that requesting an unknown hotel returns standardized 404 HOTEL_NOT_FOUND."
+      }
+    }
+  ]
+}

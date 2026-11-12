@@ -5,9 +5,12 @@ import { isValidIsoDate } from '../utils/dateUtils.js';
  * Validation schema for query parameters when listing hotels
  */
 export const getHotelsQuerySchema = z.object({
+  locationId: z.string().trim().uuid('Invalid location UUID.').optional(),
   city: z.string().trim().min(1).optional(),
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(50).default(10),
+  page: z.coerce.number().int().positive().default(1).optional(),
+  limit: z.coerce.number().int().positive().max(100).default(10).optional(),
+  sortBy: z.enum(['name', 'price', 'created_at']).default('name').optional(),
+  sortOrder: z.enum(['asc', 'desc', 'ASC', 'DESC']).default('asc').optional(),
 });
 
 /**
@@ -25,10 +28,11 @@ export const searchHotelsQuerySchema = z.object({
 });
 
 /**
- * Validation schema for route parameters with hotel ID
+ * Validation schema for route parameters with hotel ID or slug
  */
 export const hotelIdParamSchema = z.object({
-  hotelId: z.string().trim().min(1, 'Hotel ID is required'),
+  id: z.string().trim().min(1, 'Hotel identifier is required.').optional(),
+  hotelId: z.string().trim().min(1, 'Hotel identifier is required.').optional(),
 });
 
 export default {

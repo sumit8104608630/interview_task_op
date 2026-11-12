@@ -58,34 +58,42 @@ server/
 │   │
 │   ├── controllers/                    # General domain HTTP request & response handlers
 │   │   ├── hotel.controller.js         # Hotel listing and details endpoints
+│   │   ├── location.controller.js      # Location listing and details endpoints
+│   │   ├── amenity.controller.js       # Amenities catalogue endpoint
 │   │   ├── room.controller.js          # Room categories and availability quotes
 │   │   └── booking.controller.js       # Booking creation, lookup, and cancellation
 │   │
 │   ├── modules/
 │   │   └── auth/                       # Customer Authentication Domain Module
-│   │       ├── auth.routes.js          # /api/auth endpoints (send-otp, verify-otp, me, logout)
+│   │       ├── auth.routes.js          # /api/auth endpoints (send-otp, verify-otp, login, reset)
 │   │       ├── auth.controller.js      # HTTP controller mapping for auth endpoints
 │   │       ├── auth.service.js         # Registration/login business logic & session handling
 │   │       ├── auth.repository.js      # PostgreSQL queries for customers & auth_sessions
-│   │       ├── auth.validation.js      # Zod validation schemas for OTP payloads
+│   │       ├── auth.validation.js      # Zod validation schemas for auth payloads
 │   │       ├── auth.middleware.js      # requireAuth middleware checking JWT + active session
 │   │       └── auth.cookies.js         # HttpOnly cookie helpers (setAuthCookie, clearAuthCookie)
 │   │
 │   ├── services/                       # Core domain business logic
-│   │   ├── hotel.service.js            # Catalog discovery & fallback dataset loader
-│   │   ├── room.service.js             # Price calculation & inventory verification
+│   │   ├── hotel.service.js            # Catalog discovery, sorting, and details
+│   │   ├── location.service.js         # Locations filtering and active hotel counts
+│   │   ├── amenity.service.js          # Amenities retrieval
+│   │   ├── room.service.js             # Room categories and stay pricing calculation
 │   │   ├── booking.service.js          # Booking workflows & state transitions
 │   │   └── notification.service.js     # Notification coordination (non-blocking)
 │   │
 │   ├── repositories/                   # Data access layer (PostgreSQL SQL queries)
-│   │   ├── hotel.repository.js         # Hotel & image parameterized queries
+│   │   ├── hotel.repository.js         # Hotel parameterized queries with JSON aggregations
+│   │   ├── location.repository.js      # Location parameterized queries and active counts
+│   │   ├── amenity.repository.js       # Amenities queries
 │   │   ├── room.repository.js          # Room category & inventory locking queries
 │   │   └── booking.repository.js       # Booking, guest, & status update queries
 │   │
 │   ├── routes/                         # Express API route declarations
-│   │   ├── hotel.routes.js             # /api/v1/hotels endpoints
-│   │   ├── room.routes.js              # /api/v1/room-types endpoints
-│   │   ├── booking.routes.js           # /api/v1/bookings endpoints
+│   │   ├── hotel.routes.js             # /api/hotels endpoints
+│   │   ├── location.routes.js          # /api/locations endpoints
+│   │   ├── amenity.routes.js           # /api/amenities endpoints
+│   │   ├── room.routes.js              # /api/room-types endpoints
+│   │   ├── booking.routes.js           # /api/bookings endpoints
 │   │   └── index.js                    # Aggregated domain router mount
 │   │
 │   ├── middleware/                     # Cross-cutting Express middleware
@@ -98,6 +106,7 @@ server/
 │   │
 │   ├── validators/                     # General domain Zod schemas
 │   │   ├── hotel.validator.js          # Hotel search & filter schemas
+│   │   ├── location.validator.js       # Location pagination & params schemas
 │   │   ├── room.validator.js           # Room availability query schema
 │   │   └── booking.validator.js        # Booking create, lookup, and cancel schemas
 │   │
@@ -113,10 +122,12 @@ server/
 │   │   ├── connection.js               # pg.Pool instance & health-check runner
 │   │   ├── migrations/                 # Versioned SQL migration scripts
 │   │   │   ├── 001_create_customers_and_auth_sessions.sql
-│   │   │   └── 002_add_password_hash_to_customers.sql
+│   │   │   ├── 002_add_password_hash_to_customers.sql
+│   │   │   └── 003_create_hotel_catalogue_tables.sql
 │   │   └── seeds/
 │   │       ├── data/
-│   │       │   └── hotels.json         # Fictional dataset (5 detailed sample hotels)
+│   │       │   ├── demo_catalogue.json # 100 fictional hotel demo records with Unsplash images
+│   │       │   └── hotels.json         # Fictional dataset (5 sample hotels)
 │   │       └── seed.js                 # Seed loader & runner
 │   │
 │   └── utils/                          # Common helpers and domain utilities
@@ -127,7 +138,7 @@ server/
 │       ├── jwt.js                      # Cryptographic JWT signing & strict verification
 │       └── normalizeEmail.js           # Email lower-casing & trimming utility
 │
-├── tests/                              # Automated test suites (46 passing tests)
+├── tests/                              # Automated test suites (63 passing tests)
 │   ├── fixtures/
 │   │   └── sampleHotel.json            # Mock dataset for test isolation
 │   ├── unit/
@@ -137,11 +148,13 @@ server/
 │   │   └── generateBookingReference.test.js
 │   └── integration/
 │       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, password, reset)
+│       ├── catalogue.api.test.js       # Phase 2 catalogue API tests (hotels, rooms, locations, amenities)
 │       └── health.test.js              # Health-check & core route integration tests
 │
 ├── postman/
 │   ├── Customer_Authentication.postman_collection.json # Complete Postman test collection
-│   └── README.md                       # Postman testing guide & CSRF cookie instructions
+│   ├── Hotel_Catalogue.postman_collection.json         # Phase 2 Hotel Catalogue Postman collection
+│   └── README.md                       # Postman testing guide & collection instructions
 │
 ├── .env.example                        # Environment variable documentation template
 ├── .gitignore                          # Git ignore rules
@@ -204,7 +217,39 @@ The backend communicates directly with your deployed OTP microservice:
 
 ---
 
-## 4. Getting Started
+## 4. Hotel Catalogue Management System (Phase 2)
+
+### Overview
+Exposes the 100 fictional hotel demo records with direct Unsplash imagery, available locations, room categories, and amenities to the frontend application. Prevents N+1 queries through correlated JSON subqueries in PostgreSQL and parameterized SQL.
+
+### Catalogue Endpoints
+* **`GET /api/hotels`**
+  - **Query parameters:** `page`, `limit`, `locationId`, `city`, `sortBy` (`name` | `price` | `created_at`), `sortOrder` (`asc` | `desc`).
+  - Returns active hotels only (`is_active = TRUE`).
+  - Includes structured location object, sorted external Unsplash images, amenities, and room category pricing summaries.
+  - Returns metadata: `total`, `page`, `limit`, `totalPages`.
+* **`GET /api/hotels/:id`**
+  - Accepts hotel UUID or slug (e.g. `grand-residency-mumbai-001`).
+  - Returns full structured details including images sorted by `display_order`, amenities, and active room categories.
+  - Returns 404 `HOTEL_NOT_FOUND` if unknown or inactive.
+* **`GET /api/hotels/:id/rooms`**
+  - Returns active room types belonging to the specified hotel with price and capacity.
+  - Excludes internal inventory records and inactive room types.
+  - Validates hotel existence (returns 404 if hotel is not found or inactive).
+* **`GET /api/locations`**
+  - Returns all available hotel locations (cities, states, countries, timezones) with active hotel counts.
+  - Filters out inactive or empty locations.
+* **`GET /api/locations/:id`**
+  - Retrieves single location details by UUID or city name.
+  - Returns 404 `NOT_FOUND` if location does not exist.
+* **`GET /api/amenities`**
+  - Returns full catalog of available amenities (`id`, `code`, `name`).
+
+*All endpoints are mounted simultaneously under `/api/...` and `/api/v1/...` for complete client and legacy compatibility.*
+
+---
+
+## 5. Getting Started
 
 ### Installation
 ```bash
@@ -235,6 +280,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (46 tests across 6 suites)
+# Automated test suite (63 tests across 7 suites)
 npm test
 ```

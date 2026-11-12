@@ -11,7 +11,7 @@ export class RoomController {
    * Retrieves all room categories for a hotel
    */
   getRoomsByHotel = asyncHandler(async (req, res) => {
-    const { hotelId } = req.params;
+    const hotelId = req.params.id || req.params.hotelId;
     const rooms = await roomService.getRoomsByHotel(hotelId);
 
     return sendSuccess(res, {
