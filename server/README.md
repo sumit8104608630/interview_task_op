@@ -149,11 +149,13 @@ server/
 │   └── integration/
 │       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, password, reset)
 │       ├── catalogue.api.test.js       # Phase 2 catalogue API tests (hotels, rooms, locations, amenities)
+│       ├── search.api.test.js          # Phase 3 search & availability API tests (dates, capacity, inventory)
 │       └── health.test.js              # Health-check & core route integration tests
 │
 ├── postman/
-│   ├── Customer_Authentication.postman_collection.json # Complete Postman test collection
-│   ├── Hotel_Catalogue.postman_collection.json         # Phase 2 Hotel Catalogue Postman collection
+│   ├── Customer_Authentication.postman_collection.json     # Complete Postman test collection
+│   ├── Hotel_Catalogue.postman_collection.json             # Phase 2 Hotel Catalogue Postman collection
+│   ├── Hotel_Search_Availability.postman_collection.json   # Phase 3 Hotel Search & Availability Postman collection
 │   └── README.md                       # Postman testing guide & collection instructions
 │
 ├── .env.example                        # Environment variable documentation template
@@ -249,7 +251,37 @@ Exposes the 100 fictional hotel demo records with direct Unsplash imagery, avail
 
 ---
 
-## 5. Getting Started
+## 5. Hotel Search and Room Availability System (Phase 3)
+
+### Overview
+High-performance date-wise room availability search and inventory verification system. Uses CTE-based aggregated SQL queries over `room_inventory` to verify continuous multi-day room availability without N+1 loops, enforces strict date interval semantics, guest capacity, price range, and amenity criteria.
+
+### Core Business Rules & Invariants
+- **Check-in is inclusive, Check-out is exclusive:** A stay from December 1 to December 4 requires inventory on December 1, 2, and 3 (3 nights). The checkout date does not consume room inventory.
+- **Strict Inventory Integrity:** Missing inventory records are never assumed to be available; any missing date evaluates strictly to `MISSING_INVENTORY`.
+- **Date Validations:**
+  - Reject malformed dates with 400 `VALIDATION_ERROR`.
+  - Reject check-out date on or before check-in date with 400 `INVALID_DATE_RANGE`.
+  - Reject past check-in dates relative to hotel timezone (`Asia/Kolkata`) with 400 `PAST_CHECK_IN_DATE`.
+  - Reject stay durations exceeding 30 nights with 400 `STAY_DURATION_EXCEEDED`.
+- **Capacity Matching:** A room category is eligible only if `room_types.max_guests >= Math.ceil(guests / rooms)` and `available_rooms >= rooms` across all stay nights.
+- **Zero Inventory Reservation during Search:** Searching does not reserve or mutate room inventory.
+
+### Search & Availability Endpoints
+* **`GET /api/hotels/search`**
+  - **Query parameters:** `city`, `locationId`, `checkIn`, `checkOut`, `guests` (default 1), `rooms` (default 1), `minPrice`, `maxPrice`, `amenities` (comma-separated or array), `sortBy` (`lowest_price` | `highest_price` | `name`), `sortOrder` (`asc` | `desc`), `page` (default 1), `limit` (default 10).
+  - Only returns active hotels that have at least one room category satisfying the date-wise inventory, capacity, and filter criteria.
+  - Returns calculated `minPrice`, `minTotalStayPrice`, and stay metadata.
+* **`GET /api/rooms/availability`**
+  - **Query parameters:** `roomTypeId`, `checkIn`, `checkOut`, `rooms` (default 1).
+  - Returns structured stay details, room type information, total rooms, available rooms across requested stay, availability status (`AVAILABLE` | `INSUFFICIENT_ROOMS` | `MISSING_INVENTORY`), pricing breakdown, and clean nightly date-by-date breakdown without exposing internal database primary keys.
+  - Returns 404 `ROOM_NOT_FOUND` if the room category does not exist or is inactive.
+* **`GET /api/v1/room-types/:id/availability`**
+  - Supported for seamless backward compatibility.
+
+---
+
+## 6. Getting Started
 
 ### Installation
 ```bash
@@ -280,6 +312,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (63 tests across 7 suites)
+# Automated test suite (85 tests across 8 suites)
 npm test
 ```

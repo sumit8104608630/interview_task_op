@@ -7,10 +7,11 @@ import bookingRoutes from './booking.routes.js';
 
 const router = Router();
 
-// Mount domain catalogue and booking routes
+// Mount domain catalogue, room, and booking routes
 router.use('/locations', locationRoutes);
 router.use('/amenities', amenityRoutes);
 router.use('/hotels', hotelRoutes);
+router.use('/rooms', roomRoutes);
 router.use('/room-types', roomRoutes);
 router.use('/bookings', bookingRoutes);
 

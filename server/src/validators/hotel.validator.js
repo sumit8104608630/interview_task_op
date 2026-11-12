@@ -17,14 +17,34 @@ export const getHotelsQuerySchema = z.object({
  * Validation schema for hotel search by destination and date range
  */
 export const searchHotelsQuerySchema = z.object({
-  destination: z.string().trim().min(1, 'Destination is required'),
+  city: z.string().trim().min(1).optional(),
+  destination: z.string().trim().min(1).optional(),
+  locationId: z.string().trim().uuid('Invalid location UUID.').optional(),
   checkIn: z.string().refine(isValidIsoDate, {
     message: 'checkIn must be a valid date in YYYY-MM-DD format',
   }),
   checkOut: z.string().refine(isValidIsoDate, {
     message: 'checkOut must be a valid date in YYYY-MM-DD format',
   }),
-  guests: z.coerce.number().int().positive().default(1),
+  guests: z.coerce.number().int().positive().default(1).optional(),
+  rooms: z.coerce.number().int().positive().default(1).optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
+  amenities: z
+    .preprocess((val) => {
+      if (typeof val === 'string') {
+        return val.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      }
+      if (Array.isArray(val)) {
+        return val.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+      }
+      return val;
+    }, z.array(z.string().trim()).optional())
+    .optional(),
+  sortBy: z.enum(['price', 'lowest_price', 'highest_price', 'name']).default('price').optional(),
+  sortOrder: z.enum(['asc', 'desc', 'ASC', 'DESC']).default('asc').optional(),
+  page: z.coerce.number().int().positive().default(1).optional(),
+  limit: z.coerce.number().int().positive().max(100).default(10).optional(),
 });
 
 /**

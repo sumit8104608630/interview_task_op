@@ -9,7 +9,20 @@ import {
 const router = Router();
 
 /**
- * @route   GET /api/v1/room-types/:id/availability
+ * @route   GET /api/rooms/availability
+ * @desc    Check room availability across date range for a specified room category
+ * @access  Public
+ */
+router.get(
+  '/availability',
+  validate({
+    query: roomAvailabilityQuerySchema,
+  }),
+  roomController.getAvailability
+);
+
+/**
+ * @route   GET /api/room-types/:id/availability or /api/rooms/:id/availability
  * @desc    Check room availability across date range and get price quote
  * @access  Public
  */
@@ -19,7 +32,7 @@ router.get(
     params: roomParamSchema,
     query: roomAvailabilityQuerySchema,
   }),
-  roomController.checkAvailability
+  roomController.getAvailability
 );
 
 export default router;

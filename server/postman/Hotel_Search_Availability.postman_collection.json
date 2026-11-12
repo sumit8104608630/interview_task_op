@@ -1,0 +1,240 @@
+{
+  "info": {
+    "name": "Hotel Booking Portal - Phase 3: Hotel Search & Room Availability",
+    "_postman_id": "c1f7a0b3-57b1-4d33-bc41-5a3d72e9a0f3",
+    "description": "Production-grade Postman collection for Phase 3: Date-wise Hotel Search, Capacity Validation, Filters, and Room Inventory Availability.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "sampleRoomTypeId",
+      "value": "c93d0774-fc39-5cdc-96af-633dfdc97d80",
+      "type": "string"
+    },
+    {
+      "key": "checkIn",
+      "value": "2026-12-01",
+      "type": "string"
+    },
+    {
+      "key": "checkOut",
+      "value": "2026-12-04",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Hotel Search - Destination & Dates",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?city=Mumbai&checkIn={{checkIn}}&checkOut={{checkOut}}&guests=2&rooms=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "city", "value": "Mumbai" },
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "guests", "value": "2" },
+            { "key": "rooms", "value": "1" }
+          ]
+        },
+        "description": "Searches active hotels in Mumbai with sufficient room inventory for Dec 1 - Dec 4 (3 nights)."
+      }
+    },
+    {
+      "name": "2. Hotel Search - Price Range Filtering",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?city=Mumbai&checkIn={{checkIn}}&checkOut={{checkOut}}&minPrice=3000&maxPrice=7000",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "city", "value": "Mumbai" },
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "minPrice", "value": "3000" },
+            { "key": "maxPrice", "value": "7000" }
+          ]
+        },
+        "description": "Filters hotels and rooms with nightly rates between minPrice and maxPrice."
+      }
+    },
+    {
+      "name": "3. Hotel Search - Amenities Filtering",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?city=Mumbai&checkIn={{checkIn}}&checkOut={{checkOut}}&amenities=WIFI,POOL",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "city", "value": "Mumbai" },
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "amenities", "value": "WIFI,POOL" }
+          ]
+        },
+        "description": "Filters hotels that offer all specified amenity codes (WIFI and POOL)."
+      }
+    },
+    {
+      "name": "4. Hotel Search - Sort by Lowest Price",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?checkIn={{checkIn}}&checkOut={{checkOut}}&sortBy=lowest_price",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "sortBy", "value": "lowest_price" }
+          ]
+        },
+        "description": "Sorts available hotels ascending by starting nightly rate."
+      }
+    },
+    {
+      "name": "5. Hotel Search - Sort by Highest Price",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?checkIn={{checkIn}}&checkOut={{checkOut}}&sortBy=highest_price",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "sortBy", "value": "highest_price" }
+          ]
+        },
+        "description": "Sorts available hotels descending by starting nightly rate."
+      }
+    },
+    {
+      "name": "6. Hotel Search - Pagination",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?checkIn={{checkIn}}&checkOut={{checkOut}}&page=2&limit=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "page", "value": "2" },
+            { "key": "limit", "value": "5" }
+          ]
+        },
+        "description": "Retrieves page 2 with 5 results per page."
+      }
+    },
+    {
+      "name": "7. Room Availability - By Room Type ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/availability?roomTypeId={{sampleRoomTypeId}}&checkIn={{checkIn}}&checkOut={{checkOut}}&rooms=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "availability"],
+          "query": [
+            { "key": "roomTypeId", "value": "{{sampleRoomTypeId}}" },
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "rooms", "value": "1" }
+          ]
+        },
+        "description": "Fetches date-wise room availability breakdown, capacity, and total pricing for requested stay."
+      }
+    },
+    {
+      "name": "8. Room Availability - Multi-room Request",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/availability?roomTypeId={{sampleRoomTypeId}}&checkIn={{checkIn}}&checkOut={{checkOut}}&rooms=3",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "availability"],
+          "query": [
+            { "key": "roomTypeId", "value": "{{sampleRoomTypeId}}" },
+            { "key": "checkIn", "value": "{{checkIn}}" },
+            { "key": "checkOut", "value": "{{checkOut}}" },
+            { "key": "rooms", "value": "3" }
+          ]
+        },
+        "description": "Checks availability for 3 simultaneous rooms across requested nights."
+      }
+    },
+    {
+      "name": "9. Error - Past Check-in Date (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?city=Mumbai&checkIn=2020-01-01&checkOut=2020-01-05",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "city", "value": "Mumbai" },
+            { "key": "checkIn", "value": "2020-01-01" },
+            { "key": "checkOut", "value": "2020-01-05" }
+          ]
+        },
+        "description": "Validates that past check-in dates return 400 PAST_CHECK_IN_DATE error."
+      }
+    },
+    {
+      "name": "10. Error - Check-out Earlier than Check-in (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/hotels/search?city=Mumbai&checkIn=2026-12-05&checkOut=2026-12-02",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "hotels", "search"],
+          "query": [
+            { "key": "city", "value": "Mumbai" },
+            { "key": "checkIn", "value": "2026-12-05" },
+            { "key": "checkOut", "value": "2026-12-02" }
+          ]
+        },
+        "description": "Validates that invalid date ranges return 400 INVALID_DATE_RANGE error."
+      }
+    }
+  ]
+}

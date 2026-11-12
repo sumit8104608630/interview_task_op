@@ -43,4 +43,11 @@ describe('Date Utilities (dateUtils.js)', () => {
     const resultEarlier = validateStayDates('2026-12-05', '2026-12-02');
     assert.equal(resultEarlier.valid, false);
   });
+
+  it('should reject stays exceeding maximum allowed duration (30 nights)', () => {
+    const resultLongStay = validateStayDates('2026-12-01', '2027-01-10'); // 40 nights
+    assert.equal(resultLongStay.valid, false);
+    assert.equal(resultLongStay.code, 'STAY_DURATION_EXCEEDED');
+    assert.match(resultLongStay.error, /30 nights/i);
+  });
 });

@@ -34,15 +34,27 @@ export const parseIsoDateToUtc = (dateString) => {
 };
 
 /**
- * Returns today's date formatted as YYYY-MM-DD in UTC (or specified timezone)
- * @returns {string}
+ * Returns today's date formatted as YYYY-MM-DD in the specified timezone
+ * Defaults to 'Asia/Kolkata' (hotel-local policy).
+ * @param {string} [timezone='Asia/Kolkata']
+ * @returns {string} YYYY-MM-DD
  */
-export const getTodayIsoDate = () => {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export const getTodayIsoDate = (timezone = 'Asia/Kolkata') => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(new Date());
+  } catch {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(now.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 };
 
 /**
@@ -95,31 +107,64 @@ export const getStayDates = (checkIn, checkOut) => {
 /**
  * Validates check-in and check-out dates against business rules:
  * 1. Both must be valid YYYY-MM-DD dates
- * 2. Check-in must not be in the past
+ * 2. Check-in must not be in the past (based on hotel timezone)
  * 3. Check-out must be after check-in
+ * 4. Maximum stay duration must not exceed maxStayNights (default 30 nights)
+ *
  * @param {string} checkIn
  * @param {string} checkOut
- * @returns {{ valid: boolean, error?: string }}
+ * @param {object} [options]
+ * @param {string} [options.timezone='Asia/Kolkata']
+ * @param {number} [options.maxStayNights=30]
+ * @returns {{ valid: boolean, error?: string, code?: string, nights?: number }}
  */
-export const validateStayDates = (checkIn, checkOut) => {
+export const validateStayDates = (
+  checkIn,
+  checkOut,
+  { timezone = 'Asia/Kolkata', maxStayNights = 30 } = {}
+) => {
   if (!isValidIsoDate(checkIn)) {
-    return { valid: false, error: 'Check-in must be a valid date in YYYY-MM-DD format.' };
+    return {
+      valid: false,
+      code: 'INVALID_DATE_FORMAT',
+      error: 'Check-in must be a valid date in YYYY-MM-DD format.',
+    };
   }
   if (!isValidIsoDate(checkOut)) {
-    return { valid: false, error: 'Check-out must be a valid date in YYYY-MM-DD format.' };
+    return {
+      valid: false,
+      code: 'INVALID_DATE_FORMAT',
+      error: 'Check-out must be a valid date in YYYY-MM-DD format.',
+    };
   }
 
-  const today = getTodayIsoDate();
+  const today = getTodayIsoDate(timezone);
   if (checkIn < today) {
-    return { valid: false, error: 'Check-in date cannot be in the past.' };
+    return {
+      valid: false,
+      code: 'PAST_CHECK_IN_DATE',
+      error: 'Check-in date cannot be in the past.',
+    };
   }
 
   const nights = calculateNights(checkIn, checkOut);
   if (nights <= 0) {
-    return { valid: false, error: 'Check-out date must be strictly later than check-in date.' };
+    return {
+      valid: false,
+      code: 'INVALID_DATE_RANGE',
+      error: 'Check-out date must be strictly later than check-in date.',
+    };
   }
 
-  return { valid: true };
+  if (nights > maxStayNights) {
+    return {
+      valid: false,
+      code: 'STAY_DURATION_EXCEEDED',
+      error: `Maximum stay duration is ${maxStayNights} nights.`,
+    };
+  }
+
+  return { valid: true, nights };
 };
 
 export default {

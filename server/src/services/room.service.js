@@ -36,6 +36,97 @@ export class RoomService {
   }
 
   /**
+   * Retrieves date-wise room availability and stay pricing for a specific room category
+   *
+   * @param {object} params
+   * @param {string} params.roomTypeId
+   * @param {string} params.checkIn
+   * @param {string} params.checkOut
+   * @param {number} [params.rooms=1]
+   * @returns {Promise<object>}
+   */
+  async getRoomAvailability({ roomTypeId, checkIn, checkOut, rooms = 1 }) {
+    if (!roomTypeId) {
+      throw new AppError(ERROR_CODES.VALIDATION_ERROR, 'roomTypeId is required.', 400);
+    }
+
+    const dateValidation = validateStayDates(checkIn, checkOut, {
+      timezone: 'Asia/Kolkata',
+      maxStayNights: 30,
+    });
+
+    if (!dateValidation.valid) {
+      throw new AppError(dateValidation.code, dateValidation.error, 400);
+    }
+
+    const safeRooms = Math.max(1, Number(rooms) || 1);
+
+    const availability = await roomRepository.checkDateWiseAvailability({
+      roomTypeId,
+      checkIn,
+      checkOut,
+      requestedRooms: safeRooms,
+    });
+
+    if (!availability || !availability.roomType) {
+      throw new AppError(
+        ERROR_CODES.ROOM_NOT_FOUND,
+        ERROR_MESSAGES[ERROR_CODES.ROOM_NOT_FOUND],
+        404
+      );
+    }
+
+    const { roomType } = availability;
+    if (!roomType.active) {
+      throw new AppError(
+        ERROR_CODES.ROOM_NOT_FOUND,
+        ERROR_MESSAGES[ERROR_CODES.ROOM_NOT_FOUND],
+        404
+      );
+    }
+
+    const nightlyRate = Number(roomType.pricePerNight || roomType.price_per_night);
+    const nights = dateValidation.nights;
+    const totalAmount = nightlyRate * nights * safeRooms;
+
+    return {
+      requestedDates: {
+        checkIn,
+        checkOut,
+        nights,
+        requestedRooms: safeRooms,
+      },
+      roomType: {
+        id: roomType.id,
+        hotelId: roomType.hotelId,
+        hotelName: roomType.hotelName,
+        name: roomType.name,
+        description: roomType.description,
+        maxGuests: roomType.maxGuests,
+        pricePerNight: nightlyRate,
+        currency: roomType.currency || 'INR',
+        totalRooms: roomType.totalRooms,
+      },
+      totalRooms: roomType.totalRooms,
+      availableRooms: availability.minAvailableRooms,
+      availabilityStatus: availability.availabilityStatus,
+      isAvailable: availability.isAvailable,
+      pricing: {
+        nightlyRate,
+        nights,
+        rooms: safeRooms,
+        totalAmount,
+        currency: roomType.currency || 'INR',
+      },
+      breakdown: availability.breakdown.map((b) => ({
+        date: b.date,
+        availableRooms: b.availableRooms,
+        sufficient: b.sufficient,
+      })),
+    };
+  }
+
+  /**
    * Calculates stay price quote and checks inventory availability across date range
    * @param {string} roomTypeId
    * @param {string} checkIn

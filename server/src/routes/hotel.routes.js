@@ -4,6 +4,7 @@ import { roomController } from '../controllers/room.controller.js';
 import { validate } from '../middleware/validate.middleware.js';
 import {
   getHotelsQuerySchema,
+  searchHotelsQuerySchema,
   hotelIdParamSchema,
 } from '../validators/hotel.validator.js';
 
@@ -15,6 +16,14 @@ const router = Router();
  * @access  Public
  */
 router.get('/', validate({ query: getHotelsQuerySchema }), hotelController.listHotels);
+
+/**
+ * @route   GET /api/hotels/search
+ * @desc    Search active hotels with date-wise room availability, capacity, and filters
+ * @access  Public
+ * Note: Must be registered before /:id to prevent route shadowing
+ */
+router.get('/search', validate({ query: searchHotelsQuerySchema }), hotelController.searchHotels);
 
 /**
  * @route   GET /api/hotels/:id

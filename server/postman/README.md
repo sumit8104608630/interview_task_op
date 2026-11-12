@@ -6,6 +6,30 @@ This directory provides Postman collections and instructions for validating the 
 
 1. **`Customer_Authentication.postman_collection.json`**: Complete authentication suite (Email OTP registration/login, Password login, Forgot Password, Reset Password, `/me`, Logout, CSRF enforcement, and session revocation verification).
 2. **`Hotel_Catalogue.postman_collection.json`**: Complete hotel catalogue management suite (Hotels listing with pagination, city/location filters, sorting by price/name, hotel details by UUID/slug, room categories, locations with active hotel counts, and amenities).
+3. **`Hotel_Search_Availability.postman_collection.json`**: Date-wise hotel search and room inventory availability suite (Date range validation, checkout-exclusive inventory, multi-room requests, guest capacity, price/amenities filters, sorting, pagination, and room availability breakdowns).
+
+---
+
+## 1. Testing Hotel Search & Availability APIs in Postman (Phase 3)
+
+Import `Hotel_Search_Availability.postman_collection.json` into Postman. The collection includes pre-configured collection variables (`baseUrl`, `sampleRoomTypeId`, `checkIn`, `checkOut`).
+
+### Search & Availability Endpoints
+
+| Step | Request Name | Method | Path | Expected Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Hotel Search - Basic | `GET` | `/api/hotels/search?city=Mumbai&checkIn=2026-12-01&checkOut=2026-12-04&guests=2&rooms=1` | `200 OK` (Available hotels & rooms) |
+| 2 | Hotel Search - Price Range | `GET` | `/api/hotels/search?city=Mumbai&checkIn=2026-12-01&checkOut=2026-12-04&minPrice=3000&maxPrice=7000` | `200 OK` (Nightly rates within range) |
+| 3 | Hotel Search - Amenities | `GET` | `/api/hotels/search?city=Mumbai&checkIn=2026-12-01&checkOut=2026-12-04&amenities=WIFI,POOL` | `200 OK` (Must offer WIFI and POOL) |
+| 4 | Hotel Search - Lowest Price | `GET` | `/api/hotels/search?checkIn=2026-12-01&checkOut=2026-12-04&sortBy=lowest_price` | `200 OK` (Sorted cheapest first) |
+| 5 | Hotel Search - Highest Price | `GET` | `/api/hotels/search?checkIn=2026-12-01&checkOut=2026-12-04&sortBy=highest_price` | `200 OK` (Sorted highest first) |
+| 6 | Hotel Search - Pagination | `GET` | `/api/hotels/search?checkIn=2026-12-01&checkOut=2026-12-04&page=2&limit=5` | `200 OK` (Page 2, limit 5) |
+| 7 | Room Availability Breakdown | `GET` | `/api/rooms/availability?roomTypeId={{sampleRoomTypeId}}&checkIn=2026-12-01&checkOut=2026-12-04&rooms=1` | `200 OK` (Date-wise breakdown & pricing) |
+| 8 | Multi-Room Availability | `GET` | `/api/rooms/availability?roomTypeId={{sampleRoomTypeId}}&checkIn=2026-12-01&checkOut=2026-12-04&rooms=3` | `200 OK` (Verifies >= 3 rooms each night) |
+| 9 | Past Date Error Check | `GET` | `/api/hotels/search?city=Mumbai&checkIn=2020-01-01&checkOut=2020-01-05` | `400 Bad Request` (`PAST_CHECK_IN_DATE`) |
+| 10 | Invalid Date Range Check | `GET` | `/api/hotels/search?city=Mumbai&checkIn=2026-12-05&checkOut=2026-12-02` | `400 Bad Request` (`INVALID_DATE_RANGE`) |
+
+*All endpoints are also accessible via `/api/v1/...` for complete backward and frontend compatibility.*
 
 ---
 

@@ -21,8 +21,29 @@ export class RoomController {
   });
 
   /**
+   * GET /api/rooms/availability and GET /api/room-types/:id/availability
+   * Checks room availability across stay dates and returns structured stay, capacity, and pricing breakdown
+   */
+  getAvailability = asyncHandler(async (req, res) => {
+    const roomTypeId = req.query.roomTypeId || req.params.id || req.params.roomTypeId;
+    const { checkIn, checkOut, rooms } = req.query;
+
+    const result = await roomService.getRoomAvailability({
+      roomTypeId,
+      checkIn,
+      checkOut,
+      rooms: rooms ? Number(rooms) : 1,
+    });
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      data: result,
+    });
+  });
+
+  /**
    * GET /api/v1/room-types/:id/availability
-   * Checks room availability across stay dates and calculates price quote
+   * Checks room availability across stay dates and calculates price quote (backward compatible)
    */
   checkAvailability = asyncHandler(async (req, res) => {
     const { id } = req.params;
