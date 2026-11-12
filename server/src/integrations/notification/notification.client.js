@@ -1,12 +1,10 @@
 import axios from 'axios';
 import { env } from '../../config/env.js';
+import { otpClient } from '../otp/otpClient.js';
 
 /**
  * HTTP Client adapter for the external OTP & Notification Microservice
- *
- * NOTE: The endpoints, request payloads, and response envelopes below are
- * clearly marked placeholders. Do not finalize or assume upstream contracts
- * until the microservice API documentation and specification are provided.
+ * Source: https://otp-microservise.vercel.app/
  */
 export class NotificationClient {
   constructor() {
@@ -21,109 +19,118 @@ export class NotificationClient {
         }),
       },
     });
-
-    // Logging interceptors for outbound service requests
-    this.client.interceptors.request.use((config) => {
-      if (process.env.DEBUG_MICROSERVICE === 'true') {
-        console.log('[NotificationClient Outbound]', {
-          method: config.method?.toUpperCase(),
-          url: `${config.baseURL}${config.url}`,
-        });
-      }
-      return config;
-    });
   }
 
   /**
-   * [PLACEHOLDER] Requests an email OTP from the external microservice
+   * Requests an email OTP (delegates to OtpClient)
    * @param {object} params
-   * @param {string} params.email - Guest email address
-   * @param {string} params.purpose - 'BOOKING' | 'CANCELLATION'
-   * @param {string} [params.reference] - Optional booking reference
+   * @param {string} params.email
+   * @param {string} [params.purpose]
+   * @param {string} [params.reference]
    * @returns {Promise<{ success: boolean, message: string }>}
    */
   async requestEmailOtp({ email, purpose, reference }) {
-    console.log('[NotificationClient Placeholder] requestEmailOtp called for:', { email, purpose, reference });
-
-    // PLACEHOLDER: Replace with actual endpoint once API contract is provided
-    // Example: return (await this.client.post('/otp/send', { email, purpose, reference })).data;
-    return {
-      success: true,
-      message: 'OTP dispatch initiated (Placeholder - awaiting external microservice contract)',
-    };
+    return otpClient.sendOtp({ email, purpose, reference });
   }
 
   /**
-   * [PLACEHOLDER] Verifies an email OTP with the external microservice
+   * Verifies an email OTP (delegates to OtpClient)
    * @param {object} params
-   * @param {string} params.email - Guest email address
-   * @param {string} params.otp - OTP entered by user
-   * @param {string} params.purpose - 'BOOKING' | 'CANCELLATION'
-   * @param {string} [params.reference] - Optional booking reference
-   * @returns {Promise<{ valid: boolean, verificationToken?: string }>}
+   * @param {string} params.email
+   * @param {string} params.otp
+   * @param {string} [params.purpose]
+   * @returns {Promise<{ valid: boolean, error?: string }>}
    */
-  async verifyEmailOtp({ email, otp, purpose, reference }) {
-    console.log('[NotificationClient Placeholder] verifyEmailOtp called for:', { email, purpose, reference });
-
-    // PLACEHOLDER: Replace with actual endpoint once API contract is provided
-    // Example: return (await this.client.post('/otp/verify', { email, otp, purpose, reference })).data;
-    return {
-      valid: true,
-      verificationToken: `placeholder-token-${Date.now()}`,
-    };
+  async verifyEmailOtp({ email, otp, purpose }) {
+    return otpClient.verifyOtp({ email, otp, purpose });
   }
 
   /**
-   * [PLACEHOLDER] Resends an email OTP via the external microservice
-   * @param {object} params
-   * @param {string} params.email - Guest email address
-   * @param {string} params.purpose - 'BOOKING' | 'CANCELLATION'
-   * @returns {Promise<{ success: boolean, message: string }>}
-   */
-  async resendOtp({ email, purpose }) {
-    console.log('[NotificationClient Placeholder] resendOtp called for:', { email, purpose });
-
-    // PLACEHOLDER: Replace with actual endpoint once API contract is provided
-    return {
-      success: true,
-      message: 'OTP resent successfully (Placeholder)',
-    };
-  }
-
-  /**
-   * [PLACEHOLDER] Sends booking confirmation notification to guest
+   * Sends booking confirmation notification to guest via POST /api/send-email
+   *
    * @param {object} params
    * @param {string} params.email - Guest email address
    * @param {string} params.guestName - Guest full name
-   * @param {object} params.bookingDetails - Booking info (reference, hotel, dates, price)
+   * @param {object} params.bookingDetails - Booking info
    * @returns {Promise<{ success: boolean, messageId?: string }>}
    */
-  async sendBookingConfirmation({ email, guestName, bookingDetails }) {
-    console.log('[NotificationClient Placeholder] sendBookingConfirmation called for:', { email, guestName });
+  async sendBookingConfirmation({ email, guestName, bookingDetails = {} }) {
+    try {
+      const subject = `Booking Confirmation - ${bookingDetails.bookingReference || 'Hotel Booking Portal'}`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #2563eb;">Hotel Booking Confirmation</h2>
+          <p>Dear <strong>${guestName}</strong>,</p>
+          <p>Your hotel reservation has been confirmed!</p>
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Booking Reference:</strong> ${bookingDetails.bookingReference || 'N/A'}</p>
+            <p><strong>Check-In Date:</strong> ${bookingDetails.checkIn || 'N/A'}</p>
+            <p><strong>Check-Out Date:</strong> ${bookingDetails.checkOut || 'N/A'}</p>
+            <p><strong>Total Amount:</strong> ₹${bookingDetails.totalAmount || '0.00'}</p>
+          </div>
+          <p>We look forward to hosting you. Thank you for choosing our portal!</p>
+        </div>
+      `;
 
-    // PLACEHOLDER: Replace with actual endpoint once API contract is provided
-    return {
-      success: true,
-      messageId: `msg-confirm-${Date.now()}`,
-    };
+      const response = await this.client.post('/api/send-email', {
+        to: email,
+        subject,
+        html,
+        text: `Dear ${guestName}, your booking (${bookingDetails.bookingReference || ''}) is confirmed!`,
+      });
+
+      return {
+        success: response.data?.success === true,
+        messageId: response.data?.messageId,
+      };
+    } catch (error) {
+      console.error('[NotificationClient.sendBookingConfirmation] Error:', error.message);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
   }
 
   /**
-   * [PLACEHOLDER] Sends booking cancellation notification to guest
+   * Sends booking cancellation notification to guest via POST /api/send-email
+   *
    * @param {object} params
    * @param {string} params.email - Guest email address
    * @param {string} params.guestName - Guest full name
-   * @param {object} params.bookingDetails - Booking info (reference, cancellationTimestamp)
+   * @param {object} params.bookingDetails - Booking info
    * @returns {Promise<{ success: boolean, messageId?: string }>}
    */
-  async sendBookingCancellation({ email, guestName, bookingDetails }) {
-    console.log('[NotificationClient Placeholder] sendBookingCancellation called for:', { email, guestName });
+  async sendBookingCancellation({ email, guestName, bookingDetails = {} }) {
+    try {
+      const subject = `Booking Cancelled - ${bookingDetails.bookingReference || 'Hotel Booking Portal'}`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #dc2626;">Booking Cancellation Notice</h2>
+          <p>Dear <strong>${guestName}</strong>,</p>
+          <p>Your booking with reference <strong>${bookingDetails.bookingReference}</strong> has been cancelled as requested.</p>
+          <p>If you did not request this cancellation, please contact our support team immediately.</p>
+        </div>
+      `;
 
-    // PLACEHOLDER: Replace with actual endpoint once API contract is provided
-    return {
-      success: true,
-      messageId: `msg-cancel-${Date.now()}`,
-    };
+      const response = await this.client.post('/api/send-email', {
+        to: email,
+        subject,
+        html,
+        text: `Dear ${guestName}, your booking (${bookingDetails.bookingReference}) has been cancelled.`,
+      });
+
+      return {
+        success: response.data?.success === true,
+        messageId: response.data?.messageId,
+      };
+    } catch (error) {
+      console.error('[NotificationClient.sendBookingCancellation] Error:', error.message);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
   }
 }
 

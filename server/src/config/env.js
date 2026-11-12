@@ -48,14 +48,14 @@ export const env = {
 
   // External OTP & Notification Microservice
   otpService: {
-    baseUrl: process.env.OTP_SERVICE_BASE_URL || process.env.NOTIFICATION_SERVICE_BASE_URL || 'http://localhost:4000/api/v1',
+    baseUrl: process.env.OTP_SERVICE_BASE_URL || process.env.NOTIFICATION_SERVICE_BASE_URL || 'https://otp-microservise.vercel.app',
     apiKey: process.env.OTP_SERVICE_API_KEY || process.env.NOTIFICATION_SERVICE_API_KEY || '',
     timeoutMs: parseInt(process.env.OTP_SERVICE_TIMEOUT_MS || '10000', 10),
   },
 
   // Legacy notification service reference for backward compatibility
   notificationService: {
-    baseUrl: process.env.NOTIFICATION_SERVICE_BASE_URL || 'http://localhost:4000/api/v1',
+    baseUrl: process.env.NOTIFICATION_SERVICE_BASE_URL || 'https://otp-microservise.vercel.app',
     apiKey: process.env.NOTIFICATION_SERVICE_API_KEY || '',
     timeoutMs: parseInt(process.env.NOTIFICATION_SERVICE_TIMEOUT_MS || '10000', 10),
   },
