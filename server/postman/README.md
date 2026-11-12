@@ -1,76 +1,62 @@
 # Postman API Collection & Testing Guide
 
-This directory provides testing documentation and requests for validating the Hotel Booking Portal backend APIs using Postman.
+This directory provides Postman collections and instructions for validating the Hotel Booking Portal backend APIs.
 
-## Environment Variables
+## Collections in this Directory
 
-Configure the following variables in your Postman Environment:
-
-| Variable | Initial Value | Description |
-| :--- | :--- | :--- |
-| `baseUrl` | `http://localhost:5000` | Server host and port |
-| `apiPrefix` | `/api/v1` | Versioned API prefix |
-| `hotelId` | `c0a80101-0000-4000-8000-000000000001` | Sample hotel ID |
-| `roomTypeId` | `room-001-1` | Sample room category ID |
-| `bookingReference` | `HBP-EXAMPLE1` | Booking reference code |
+1. **`Customer_Authentication.postman_collection.json`**: Complete passwordless email OTP authentication suite (Registration, Login, `/me`, Logout, CSRF enforcement, and session revocation verification).
 
 ---
 
-## Endpoint Directory
+## 1. Testing Customer Authentication in Postman
 
-### 1. System Health Check
-- **Method**: `GET`
-- **URL**: `{{baseUrl}}/api/health`
-- **Description**: Verifies HTTP server availability, uptime, and PostgreSQL connectivity.
+### Cookie Jar Management
+Postman has a built-in Cookie Jar that automatically captures and sends `Set-Cookie` headers for matching domains (`localhost` / `127.0.0.1`).
+- When `POST /api/auth/verify-otp` succeeds, Postman automatically stores `auth_token` in its cookie jar.
+- Subsequent calls to `GET /api/auth/me` will automatically include this cookie.
+- When `POST /api/auth/logout` succeeds, the server sends `clearCookie` which clears the cookie from the jar.
 
-### 2. Hotel Discovery
-- **List All Hotels**:
-  - `GET {{baseUrl}}{{apiPrefix}}/hotels`
-- **Filter Hotels by City**:
-  - `GET {{baseUrl}}{{apiPrefix}}/hotels?city=Jaipur&limit=5&page=1`
-- **Search by Destination & Stay Interval**:
-  - `GET {{baseUrl}}{{apiPrefix}}/hotels/search?destination=Goa&checkIn=2026-11-20&checkOut=2026-11-23&guests=2`
-- **Get Hotel Details**:
-  - `GET {{baseUrl}}{{apiPrefix}}/hotels/{{hotelId}}`
-- **Get Hotel Room Types**:
-  - `GET {{baseUrl}}{{apiPrefix}}/hotels/{{hotelId}}/rooms`
+### CSRF Protection in Postman
+State-changing cookie-authenticated requests (`POST /api/auth/logout`) require a valid `x-csrf-token` header:
+1. `POST /api/auth/verify-otp` returns `csrfToken` in the response JSON and sets a readable `csrf_token` cookie.
+2. The collection's Tests script automatically saves this value into the collection variable `{{csrfToken}}`:
+   ```javascript
+   const json = pm.response.json();
+   if (json.data && json.data.csrfToken) {
+       pm.collectionVariables.set('csrfToken', json.data.csrfToken);
+   }
+   ```
+3. The `POST /api/auth/logout` request includes the header:
+   ```
+   x-csrf-token: {{csrfToken}}
+   ```
 
-### 3. Room Availability & Pricing Quote
-- **Check Availability & Quote**:
-  - `GET {{baseUrl}}{{apiPrefix}}/room-types/{{roomTypeId}}/availability?checkIn=2026-11-20&checkOut=2026-11-23`
+---
 
-### 4. Booking Operations
-- **Create One-Room Booking**:
-  - `POST {{baseUrl}}{{apiPrefix}}/bookings`
-  - **Headers**: `Content-Type: application/json`
-  - **Body (JSON)**:
-    ```json
-    {
-      "roomTypeId": "room-001-1",
-      "checkIn": "2026-11-20",
-      "checkOut": "2026-11-23",
-      "guestName": "Aditya Verma",
-      "guestEmail": "aditya.verma@example.com",
-      "otpToken": "sample-verified-otp-token"
-    }
-    ```
-- **Lookup Booking**:
-  - `POST {{baseUrl}}{{apiPrefix}}/bookings/lookup`
-  - **Body (JSON)**:
-    ```json
-    {
-      "bookingReference": "HBP-7K8M9PQ2",
-      "email": "aditya.verma@example.com"
-    }
-    ```
-- **Request Cancellation OTP**:
-  - `POST {{baseUrl}}{{apiPrefix}}/bookings/{{bookingReference}}/cancellation-otp`
-- **Confirm Cancellation**:
-  - `POST {{baseUrl}}{{apiPrefix}}/bookings/{{bookingReference}}/cancel`
-  - **Body (JSON)**:
-    ```json
-    {
-      "cancellationOtp": "123456",
-      "reason": "Change of travel plans"
-    }
-    ```
+## 2. Customer Authentication Endpoints
+
+| Step | Request Name | Method | Path | Expected Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Send Registration OTP | `POST` | `/api/auth/send-otp` | `200 OK` |
+| 2 | Verify Registration OTP | `POST` | `/api/auth/verify-otp` | `200 OK` (Sets `auth_token` HttpOnly cookie) |
+| 3 | Send Login OTP | `POST` | `/api/auth/send-otp` | `200 OK` |
+| 4 | Verify Login OTP | `POST` | `/api/auth/verify-otp` | `200 OK` (Updates session) |
+| 5 | Get Current Customer Profile | `GET` | `/api/auth/me` | `200 OK` (Returns customer data) |
+| 6 | Logout Customer | `POST` | `/api/auth/logout` | `200 OK` (Revokes session in DB) |
+| 7 | Get Profile After Logout | `GET` | `/api/auth/me` | `401 Unauthorized` (Session revoked) |
+
+---
+
+## 3. General Hotel & Booking Endpoints
+
+| Area | Method | Path | Description |
+| :--- | :--- | :--- | :--- |
+| System | `GET` | `/api/health` | Service and database connectivity check |
+| Hotels | `GET` | `/api/v1/hotels` | List hotels with pagination and city filters |
+| Hotels | `GET` | `/api/v1/hotels/:hotelId` | Hotel details and room categories |
+| Hotels | `GET` | `/api/v1/hotels/search` | Search by destination and stay dates |
+| Rooms | `GET` | `/api/v1/room-types/:id/availability` | Check date-range availability & quote |
+| Bookings | `POST` | `/api/v1/bookings` | Create one-room booking |
+| Bookings | `POST` | `/api/v1/bookings/lookup` | Look up booking by reference and email |
+| Bookings | `POST` | `/api/v1/bookings/:reference/cancellation-otp` | Request cancellation OTP |
+| Bookings | `POST` | `/api/v1/bookings/:reference/cancel` | Confirm cancellation with OTP |

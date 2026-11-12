@@ -1,0 +1,183 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "name": "Hotel Booking Portal - Customer Authentication",
+    "description": "Postman API collection for passwordless customer authentication using Email OTP, HttpOnly cookies, JWT, and CSRF protection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "csrfToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Send Registration OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer@example.com\",\n  \"fullName\": \"John Doe\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "send-otp"]
+        },
+        "description": "Dispatches a one-time verification code to the customer's email address for registration."
+      }
+    },
+    {
+      "name": "2. Verify Registration OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.data && json.data.csrfToken) {",
+              "    pm.collectionVariables.set('csrfToken', json.data.csrfToken);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer@example.com\",\n  \"fullName\": \"John Doe\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-otp"]
+        },
+        "description": "Verifies registration OTP, creates customer record, generates JWT, and sets auth_token HttpOnly cookie."
+      }
+    },
+    {
+      "name": "3. Send Login OTP (Existing Customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "send-otp"]
+        },
+        "description": "Dispatches an OTP for an existing customer login. Returns generic response to prevent email enumeration."
+      }
+    },
+    {
+      "name": "4. Verify Login OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.data && json.data.csrfToken) {",
+              "    pm.collectionVariables.set('csrfToken', json.data.csrfToken);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer@example.com\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-otp"]
+        },
+        "description": "Verifies login OTP, creates new auth_sessions row, and issues HttpOnly cookie."
+      }
+    },
+    {
+      "name": "5. Get Current Customer Profile (/me)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        },
+        "description": "Returns authenticated customer details by verifying the active HttpOnly cookie session."
+      }
+    },
+    {
+      "name": "6. Logout Customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-csrf-token",
+            "value": "{{csrfToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "logout"]
+        },
+        "description": "Revokes current session in PostgreSQL auth_sessions and clears the auth cookie."
+      }
+    },
+    {
+      "name": "7. Get Current Customer After Logout (Expect 401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        },
+        "description": "Confirms that the revoked session and cleared cookie are rejected with 401 Unauthorized."
+      }
+    }
+  ]
+}
