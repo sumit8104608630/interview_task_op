@@ -1,0 +1,373 @@
+[
+  {
+    "id": "c0a80101-0000-4000-8000-000000000001",
+    "name": "The Royal Orchid Heritage",
+    "slug": "royal-orchid-heritage-jaipur",
+    "description": "Experience regal luxury in a restored 19th-century palace featuring lush courtyards, traditional Rajasthani architecture, and world-class hospitality.",
+    "location": {
+      "address": "12 Palace Road, Civil Lines",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "country": "India",
+      "postalCode": "302006",
+      "latitude": 26.9124,
+      "longitude": 75.7873
+    },
+    "amenities": [
+      "Free High-Speed Wi-Fi",
+      "Swimming Pool",
+      "Ayurvedic Spa & Wellness Center",
+      "Complimentary Buffet Breakfast",
+      "24/7 In-Room Dining",
+      "Valet Parking",
+      "Airport Shuttle"
+    ],
+    "rating": 4.8,
+    "reviewCount": 342,
+    "images": [
+      {
+        "id": "img-001-1",
+        "url": "https://placehold.co/800x600/1e293b/ffffff?text=Royal+Orchid+Exterior",
+        "public_id": "placeholder_hotel_1_exterior",
+        "alt_text": "Grand palace exterior at dusk",
+        "is_primary": true
+      },
+      {
+        "id": "img-001-2",
+        "url": "https://placehold.co/800x600/1e293b/ffffff?text=Royal+Orchid+Courtyard",
+        "public_id": "placeholder_hotel_1_courtyard",
+        "alt_text": "Central marble courtyard with fountain",
+        "is_primary": false
+      }
+    ],
+    "roomCategories": [
+      {
+        "id": "room-001-1",
+        "name": "Heritage Deluxe Room",
+        "slug": "heritage-deluxe-room",
+        "description": "Spacious room with hand-crafted teak furniture, marble en-suite bathroom, and courtyard views.",
+        "pricePerNight": 6500.00,
+        "capacity": {
+          "maxGuests": 2,
+          "adults": 2,
+          "children": 1
+        },
+        "totalRooms": 15,
+        "bedType": "1 King Bed",
+        "amenities": ["Air Conditioning", "Mini Bar", "Espresso Machine", "Bathrobes", "Smart TV"],
+        "images": [
+          {
+            "id": "room-img-001-1",
+            "url": "https://placehold.co/800x600/1e293b/ffffff?text=Heritage+Deluxe+Room",
+            "public_id": "placeholder_room_1_deluxe",
+            "alt_text": "Heritage Deluxe Room interior",
+            "is_primary": true
+          }
+        ]
+      },
+      {
+        "id": "room-001-2",
+        "name": "Maharaja Royal Suite",
+        "slug": "maharaja-royal-suite",
+        "description": "An expansive suite featuring a private balcony, separate living lounge, and deep soaking tub.",
+        "pricePerNight": 12500.00,
+        "capacity": {
+          "maxGuests": 3,
+          "adults": 2,
+          "children": 2
+        },
+        "totalRooms": 5,
+        "bedType": "1 Super King Bed",
+        "amenities": ["Private Balcony", "Butler Service", "Living Room", "Jacuzzi", "High-Speed Wi-Fi"],
+        "images": [
+          {
+            "id": "room-img-001-2",
+            "url": "https://placehold.co/800x600/1e293b/ffffff?text=Maharaja+Royal+Suite",
+            "public_id": "placeholder_room_1_suite",
+            "alt_text": "Maharaja Royal Suite view",
+            "is_primary": true
+          }
+        ]
+      }
+    ],
+    "policies": {
+      "checkInTime": "14:00",
+      "checkOutTime": "11:00",
+      "cancellationPolicy": "Free cancellation up to 24 hours prior to check-in date. Cancellation requires email OTP verification.",
+      "petPolicy": "Pets not permitted.",
+      "smokingPolicy": "100% Non-smoking property."
+    }
+  },
+  {
+    "id": "c0a80101-0000-4000-8000-000000000002",
+    "name": "Azure Bay Coastal Resort",
+    "slug": "azure-bay-coastal-resort-goa",
+    "description": "Nestled along the pristine coastline of North Goa, offering direct beach access, infinity pool vistas, and sea-view dining.",
+    "location": {
+      "address": "45 Candolim Beach Road",
+      "city": "Goa",
+      "state": "Goa",
+      "country": "India",
+      "postalCode": "403515",
+      "latitude": 15.5188,
+      "longitude": 73.7667
+    },
+    "amenities": [
+      "Direct Beach Access",
+      "Infinity Pool",
+      "Sunset Seafood Restaurant",
+      "Complimentary Wi-Fi",
+      "Fitness Center",
+      "Cocktail Bar",
+      "Free Parking"
+    ],
+    "rating": 4.7,
+    "reviewCount": 218,
+    "images": [
+      {
+        "id": "img-002-1",
+        "url": "https://placehold.co/800x600/0284c7/ffffff?text=Azure+Bay+Resort+View",
+        "public_id": "placeholder_hotel_2_resort_view",
+        "alt_text": "Resort beachfront infinity pool overlooking the Arabian Sea",
+        "is_primary": true
+      }
+    ],
+    "roomCategories": [
+      {
+        "id": "room-002-1",
+        "name": "Ocean View Premium Room",
+        "slug": "ocean-view-premium-room",
+        "description": "Modern room with floor-to-ceiling windows looking out over the sea with a private sit-out deck.",
+        "pricePerNight": 7800.00,
+        "capacity": {
+          "maxGuests": 2,
+          "adults": 2,
+          "children": 1
+        },
+        "totalRooms": 20,
+        "bedType": "1 Queen Bed",
+        "amenities": ["Ocean View", "Private Balcony", "Air Conditioning", "Minibar", "Smart TV"],
+        "images": [
+          {
+            "id": "room-img-002-1",
+            "url": "https://placehold.co/800x600/0284c7/ffffff?text=Ocean+View+Room",
+            "public_id": "placeholder_room_2_ocean_view",
+            "alt_text": "Ocean View room interior",
+            "is_primary": true
+          }
+        ]
+      }
+    ],
+    "policies": {
+      "checkInTime": "15:00",
+      "checkOutTime": "11:00",
+      "cancellationPolicy": "Free cancellation up to 48 hours before check-in. Requires OTP verification.",
+      "petPolicy": "Pets allowed on ground-floor suites with advance notice.",
+      "smokingPolicy": "Designated outdoor smoking zones only."
+    }
+  },
+  {
+    "id": "c0a80101-0000-4000-8000-000000000003",
+    "name": "Misty Meadows Highland Retreat",
+    "slug": "misty-meadows-highland-retreat-munnar",
+    "description": "Surrounded by rolling emerald tea plantations and mist-covered mountain peaks, a serene sanctuary for nature lovers and tranquil getaways.",
+    "location": {
+      "address": "Tea Estate Road, Pothamedu",
+      "city": "Munnar",
+      "state": "Kerala",
+      "country": "India",
+      "postalCode": "685612",
+      "latitude": 10.0889,
+      "longitude": 77.0595
+    },
+    "amenities": [
+      "Tea Plantation Walk Tour",
+      "Fireplace Lounge",
+      "Panoramic Valley Views",
+      "In-House Organic Café",
+      "High-Speed Wi-Fi",
+      "Yoga & Meditation Deck",
+      "Campfire Evenings"
+    ],
+    "rating": 4.9,
+    "reviewCount": 185,
+    "images": [
+      {
+        "id": "img-003-1",
+        "url": "https://placehold.co/800x600/059669/ffffff?text=Misty+Meadows+Highland",
+        "public_id": "placeholder_hotel_3_plantation",
+        "alt_text": "Misty tea garden estate surrounding the stone retreat cottages",
+        "is_primary": true
+      }
+    ],
+    "roomCategories": [
+      {
+        "id": "room-003-1",
+        "name": "Valley View Cottage",
+        "slug": "valley-view-cottage",
+        "description": "Private wood-timbered cottage featuring a glass wall opening directly to misty valley panoramas.",
+        "pricePerNight": 5200.00,
+        "capacity": {
+          "maxGuests": 2,
+          "adults": 2,
+          "children": 1
+        },
+        "totalRooms": 12,
+        "bedType": "1 King Bed",
+        "amenities": ["Valley View", "Fireplace", "Hot Water Geyser", "Tea/Coffee Maker", "Balcony"],
+        "images": [
+          {
+            "id": "room-img-003-1",
+            "url": "https://placehold.co/800x600/059669/ffffff?text=Valley+View+Cottage",
+            "public_id": "placeholder_room_3_cottage",
+            "alt_text": "Cottage bedroom overlooking mountains",
+            "is_primary": true
+          }
+        ]
+      }
+    ],
+    "policies": {
+      "checkInTime": "13:00",
+      "checkOutTime": "11:00",
+      "cancellationPolicy": "Free cancellation up to 24 hours before check-in.",
+      "petPolicy": "Pets not permitted.",
+      "smokingPolicy": "Strictly non-smoking."
+    }
+  },
+  {
+    "id": "c0a80101-0000-4000-8000-000000000004",
+    "name": "Urban Skyline Boutique Hotel",
+    "slug": "urban-skyline-boutique-hotel-bengaluru",
+    "description": "Contemporary tech-chic hotel in the heart of Bengaluru's tech corridor with ergonomic work desks, artisan coffee, and a rooftop cocktail lounge.",
+    "location": {
+      "address": "88 Outer Ring Road, Bellandur",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "country": "India",
+      "postalCode": "560103",
+      "latitude": 12.9260,
+      "longitude": 77.6762
+    },
+    "amenities": [
+      "Ultra-Fast Fiber Wi-Fi (300 Mbps)",
+      "Rooftop Infinity Lounge",
+      "Co-Working Pods",
+      "24/7 Power Backup",
+      "State-of-the-art Gym",
+      "Smart Keyless Access",
+      "Electric Vehicle (EV) Charging"
+    ],
+    "rating": 4.6,
+    "reviewCount": 410,
+    "images": [
+      {
+        "id": "img-004-1",
+        "url": "https://placehold.co/800x600/3b82f6/ffffff?text=Urban+Skyline+Hotel",
+        "public_id": "placeholder_hotel_4_skyline",
+        "alt_text": "Modern glass building facade lit up at night",
+        "is_primary": true
+      }
+    ],
+    "roomCategories": [
+      {
+        "id": "room-004-1",
+        "name": "Executive Studio Room",
+        "slug": "executive-studio-room",
+        "description": "Designed for business travelers with an ergonomic Herman Miller chair, standing desk, and rain shower.",
+        "pricePerNight": 4200.00,
+        "capacity": {
+          "maxGuests": 2,
+          "adults": 2,
+          "children": 0
+        },
+        "totalRooms": 25,
+        "bedType": "1 King Bed",
+        "amenities": ["Ergonomic Workstation", "Smart TV with Casting", "Nespresso Machine", "Soundproof Windows"],
+        "images": [
+          {
+            "id": "room-img-004-1",
+            "url": "https://placehold.co/800x600/3b82f6/ffffff?text=Executive+Studio+Room",
+            "public_id": "placeholder_room_4_studio",
+            "alt_text": "Executive Studio modern interior",
+            "is_primary": true
+          }
+        ]
+      }
+    ],
+    "policies": {
+      "checkInTime": "14:00",
+      "checkOutTime": "12:00",
+      "cancellationPolicy": "Free cancellation up to 6 hours before check-in.",
+      "petPolicy": "Service animals only.",
+      "smokingPolicy": "Non-smoking inside rooms."
+    }
+  },
+  {
+    "id": "c0a80101-0000-4000-8000-000000000005",
+    "name": "The Grand Oasis Palace",
+    "slug": "grand-oasis-palace-udaipur",
+    "description": "An enchanting white-marble palace hotel floating peacefully on the shores of Lake Pichola, offering sublime sunset views and heritage boat cruises.",
+    "location": {
+      "address": "Lake Pichola West Shore, Haridas Ji Ki Magri",
+      "city": "Udaipur",
+      "state": "Rajasthan",
+      "country": "India",
+      "postalCode": "313001",
+      "latitude": 24.5760,
+      "longitude": 73.6800
+    },
+    "amenities": [
+      "Lakefront Fine Dining",
+      "Private Boat Transfer",
+      "Temperature-Controlled Pool",
+      "Heritage Cultural Shows",
+      "Spa & Steam Pavilion",
+      "Complimentary Wi-Fi",
+      "24/7 Concierge"
+    ],
+    "rating": 4.9,
+    "reviewCount": 512,
+    "images": [
+      {
+        "id": "img-005-1",
+        "url": "https://placehold.co/800x600/d97706/ffffff?text=Grand+Oasis+Palace",
+        "public_id": "placeholder_hotel_5_lakeview",
+        "alt_text": "Palace reflected in the serene waters of Lake Pichola",
+        "is_primary": true
+      }
+    ],
+    "roomCategories": [
+      {
+        "id": "room-005-1",
+        "name": "Lake View Royal Room",
+        "slug": "lake-view-royal-room",
+        "description": "Classic Mewari arches frame picturesque views of the lake and City Palace from this regal bedchamber.",
+        "pricePerNight": 9500.00,
+        "capacity": {
+          "maxGuests": 2,
+          "adults": 2,
+          "children": 1
+        },
+        "totalRooms": 18,
+        "bedType": "1 King Bed",
+        "amenities": ["Lake View", "Traditional Jharokha Seating", "Deep Soaking Marble Tub", "Complimentary Fruit Basket"],
+        "images": [
+          {
+            "id": "room-img-005-1",
+            "url": "https://placehold.co/800x600/d97706/ffffff?text=Lake+View+Royal+Room",
+            "public_id": "placeholder_room_5_royal",
+            "alt_text": "Royal room with lake view window",
+            "is_primary": true
+          }
+        ]
+      }
+    ],
+    "policies": {
+      "checkInTime": "14:00",
+      "checkOutTime": "11:00",
+      "cancellationPolicy": "Free cancellation up to 48 hours prior to check-in. Requires email OTP authorization.",
+      "petPolicy": "Pets not permitted.",
+      "smokingPolicy": "100% Non-smoking property."
+    }
+  }
+]

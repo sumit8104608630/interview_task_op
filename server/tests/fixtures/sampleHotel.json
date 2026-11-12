@@ -1,0 +1,17 @@
+{
+  "id": "c0a80101-0000-4000-8000-000000000001",
+  "name": "The Royal Orchid Heritage",
+  "slug": "royal-orchid-heritage-jaipur",
+  "location": {
+    "city": "Jaipur",
+    "country": "India"
+  },
+  "rating": 4.8,
+  "roomCategories": [
+    {
+      "id": "room-001-1",
+      "name": "Heritage Deluxe Room",
+      "pricePerNight": 6500.00
+    }
+  ]
+}
