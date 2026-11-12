@@ -265,4 +265,177 @@ describe('Customer Authentication Service & Domain Rules (auth.service.js)', () 
       }
     );
   });
+
+  it('14. should register new customer with password and allow password login', async () => {
+    // Register with password
+    const regResult = await authService.verifyOtpAndAuthenticate({
+      email: 'pass.user@example.com',
+      fullName: 'Pass User',
+      password: 'StrongPassword123',
+      otp: '123456',
+    });
+    assert.ok(regResult.customer);
+
+    // Verify stored customer has a password_hash
+    const stored = await authRepository.findCustomerByEmail('pass.user@example.com');
+    assert.ok(stored.password_hash);
+    assert.notEqual(stored.password_hash, 'StrongPassword123'); // Must be hashed
+
+    // Login with password
+    const loginResult = await authService.loginWithPassword({
+      email: 'pass.user@example.com',
+      password: 'StrongPassword123',
+    });
+    assert.ok(loginResult.token);
+    assert.equal(loginResult.customer.email, 'pass.user@example.com');
+  });
+
+  it('15. should reject password login with incorrect password', async () => {
+    await authService.verifyOtpAndAuthenticate({
+      email: 'wrongpass.user@example.com',
+      fullName: 'Wrong Pass User',
+      password: 'StrongPassword123',
+      otp: '123456',
+    });
+
+    await assert.rejects(
+      async () => {
+        await authService.loginWithPassword({
+          email: 'wrongpass.user@example.com',
+          password: 'IncorrectPassword999',
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 401);
+        assert.equal(err.code, 'INVALID_CREDENTIALS');
+        return true;
+      }
+    );
+  });
+
+  it('16. should reject password login for non-existent customer with 401', async () => {
+    await assert.rejects(
+      async () => {
+        await authService.loginWithPassword({
+          email: 'nonexistent@example.com',
+          password: 'SomePassword123',
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 401);
+        assert.equal(err.code, 'INVALID_CREDENTIALS');
+        return true;
+      }
+    );
+  });
+
+  it('17. should reject password login for account with no password set', async () => {
+    // Pure passwordless registration
+    await authService.verifyOtpAndAuthenticate({
+      email: 'nopass@example.com',
+      fullName: 'No Pass User',
+      otp: '123456',
+    });
+
+    await assert.rejects(
+      async () => {
+        await authService.loginWithPassword({
+          email: 'nopass@example.com',
+          password: 'AnyPassword123',
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.equal(err.code, 'PASSWORD_NOT_SET');
+        return true;
+      }
+    );
+  });
+
+  it('18. should handle forgot-password and reset-password with session invalidation', async () => {
+    // 1. Create customer with initial password
+    const reg = await authService.verifyOtpAndAuthenticate({
+      email: 'reset.me@example.com',
+      fullName: 'Reset Candidate',
+      password: 'InitialPassword123',
+      otp: '123456',
+    });
+
+    const oldSessionToken = reg.token;
+    const oldSessionId = jwt.decode(oldSessionToken).jti;
+
+    // Active session works initially
+    const profileBefore = await authService.getCurrentCustomer(oldSessionId);
+    assert.equal(profileBefore.email, 'reset.me@example.com');
+
+    // 2. Request forgot password
+    const forgotRes = await authService.forgotPassword({ email: 'reset.me@example.com' });
+    assert.equal(forgotRes.success, true);
+    assert.match(forgotRes.message, /password reset code has been dispatched/i);
+
+    // 3. Reset password using valid OTP
+    const resetRes = await authService.resetPassword({
+      email: 'reset.me@example.com',
+      otp: '123456',
+      newPassword: 'BrandNewPassword999',
+    });
+    assert.equal(resetRes.success, true);
+    assert.match(resetRes.message, /reset successfully/i);
+
+    // 4. Old session must now be revoked
+    await assert.rejects(
+      async () => {
+        await authService.getCurrentCustomer(oldSessionId);
+      },
+      (err) => {
+        assert.equal(err.statusCode, 401);
+        assert.match(err.message, /revoked/i);
+        return true;
+      }
+    );
+
+    // 5. Old password login must fail
+    await assert.rejects(
+      async () => {
+        await authService.loginWithPassword({
+          email: 'reset.me@example.com',
+          password: 'InitialPassword123',
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 401);
+        return true;
+      }
+    );
+
+    // 6. New password login must succeed
+    const newLogin = await authService.loginWithPassword({
+      email: 'reset.me@example.com',
+      password: 'BrandNewPassword999',
+    });
+    assert.ok(newLogin.token);
+    assert.equal(newLogin.customer.email, 'reset.me@example.com');
+  });
+
+  it('19. should reject password reset with invalid OTP', async () => {
+    await authRepository.createCustomer({
+      email: 'badotp.reset@example.com',
+      fullName: 'Bad OTP Reset',
+    });
+
+    await assert.rejects(
+      async () => {
+        await authService.resetPassword({
+          email: 'badotp.reset@example.com',
+          otp: '000000',
+          newPassword: 'ValidPassword123',
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.match(err.message, /invalid verification code/i);
+        return true;
+      }
+    );
+  });
 });

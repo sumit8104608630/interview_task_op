@@ -231,4 +231,124 @@ describe('Customer Authentication API End-to-End Integration Tests', () => {
     // Express CORS error handler responds with 500 / error message when origin callback returns error
     assert.ok(res.status >= 400);
   });
+
+  it('9. POST /api/auth/login succeeds with valid credentials and sets HttpOnly cookie', async () => {
+    // Register user with password first
+    await fetch(`${baseUrl}/api/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'api.login@example.com',
+        fullName: 'API Login User',
+        password: 'Password123!',
+        otp: '123456',
+      }),
+    });
+
+    // Perform password login
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'api.login@example.com',
+        password: 'Password123!',
+      }),
+    });
+
+    assert.equal(loginRes.status, 200);
+    const json = await loginRes.json();
+    assert.equal(json.success, true);
+    assert.equal(json.data.customer.email, 'api.login@example.com');
+    assert.ok(json.data.csrfToken);
+
+    // Verify cookies set
+    const setCookie = loginRes.headers.get('set-cookie');
+    assert.ok(setCookie);
+    assert.match(setCookie, new RegExp(env.cookies.authCookieName));
+  });
+
+  it('10. POST /api/auth/login rejects wrong password with 401', async () => {
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'api.login@example.com',
+        password: 'WrongPassword999',
+      }),
+    });
+
+    assert.equal(loginRes.status, 401);
+    const json = await loginRes.json();
+    assert.equal(json.success, false);
+    assert.equal(json.error.code, 'INVALID_CREDENTIALS');
+  });
+
+  it('11. Forgot and Reset password flow works over HTTP and invalidates prior sessions', async () => {
+    const email = 'http.reset@example.com';
+
+    // 1. Register with initial password
+    const regRes = await fetch(`${baseUrl}/api/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        fullName: 'HTTP Reset User',
+        password: 'OldPassword123',
+        otp: '123456',
+      }),
+    });
+    assert.equal(regRes.status, 200);
+
+    const rawCookies = regRes.headers.getSetCookie
+      ? regRes.headers.getSetCookie()
+      : [regRes.headers.get('set-cookie')];
+    const initialCookie = rawCookies.map((c) => c.split(';')[0]).join('; ');
+
+    // Session is valid initially
+    const meBefore = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Cookie: initialCookie },
+    });
+    assert.equal(meBefore.status, 200);
+
+    // 2. Call /forgot-password
+    const forgotRes = await fetch(`${baseUrl}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    assert.equal(forgotRes.status, 200);
+    const forgotJson = await forgotRes.json();
+    assert.equal(forgotJson.success, true);
+
+    // 3. Call /reset-password
+    const resetRes = await fetch(`${baseUrl}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        otp: '123456',
+        newPassword: 'BrandNewSecurePassword123',
+      }),
+    });
+    assert.equal(resetRes.status, 200);
+    const resetJson = await resetRes.json();
+    assert.equal(resetJson.success, true);
+
+    // 4. Old session cookie must be rejected on /me
+    const meAfter = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Cookie: initialCookie },
+    });
+    assert.equal(meAfter.status, 401);
+
+    // 5. Login with new password works
+    const newLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password: 'BrandNewSecurePassword123',
+      }),
+    });
+    assert.equal(newLoginRes.status, 200);
+  });
 });

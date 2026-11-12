@@ -2,7 +2,13 @@ import { Router } from 'express';
 import { authController } from './auth.controller.js';
 import { requireAuth } from './auth.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
-import { sendOtpSchema, verifyOtpSchema } from './auth.validation.js';
+import {
+  sendOtpSchema,
+  verifyOtpSchema,
+  loginWithPasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from './auth.validation.js';
 import { otpSendRateLimiter, otpVerifyRateLimiter } from '../../middleware/rateLimiter.middleware.js';
 import { verifyCsrf } from '../../middleware/csrf.middleware.js';
 
@@ -30,6 +36,41 @@ router.post(
   otpVerifyRateLimiter.middleware(),
   validate({ body: verifyOtpSchema }),
   authController.verifyOtp
+);
+
+/**
+ * @route   POST /api/auth/login
+ * @desc    Authenticate customer using Email and Password
+ * @access  Public
+ */
+router.post(
+  '/login',
+  validate({ body: loginWithPasswordSchema }),
+  authController.login
+);
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request a password reset OTP code
+ * @access  Public (Rate limited)
+ */
+router.post(
+  '/forgot-password',
+  otpSendRateLimiter.middleware(),
+  validate({ body: forgotPasswordSchema }),
+  authController.forgotPassword
+);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Verify OTP and set new customer password
+ * @access  Public (Rate limited)
+ */
+router.post(
+  '/reset-password',
+  otpVerifyRateLimiter.middleware(),
+  validate({ body: resetPasswordSchema }),
+  authController.resetPassword
 );
 
 /**

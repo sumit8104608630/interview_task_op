@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { authRepository } from './auth.repository.js';
 import { otpClient } from '../../integrations/otp/otpClient.js';
 import { signCustomerToken } from '../../utils/jwt.js';
@@ -10,7 +11,7 @@ import { ERROR_CODES, ERROR_MESSAGES } from '../../constants/errorMessages.js';
 
 /**
  * Customer Authentication Business Logic Service
- * Handles passwordless registration and login via email OTP,
+ * Handles password and passwordless registration, login, forgot password,
  * session lifecycle management, and active session verification.
  */
 export class AuthService {
@@ -77,10 +78,11 @@ export class AuthService {
    * @param {string} params.email
    * @param {string} params.otp
    * @param {string} [params.fullName]
+   * @param {string} [params.password]
    * @param {string} [params.userAgent]
    * @returns {Promise<{ customer: object, token: string, maxAgeMs: number }>}
    */
-  async verifyOtpAndAuthenticate({ email, otp, fullName, userAgent = 'Unknown' }) {
+  async verifyOtpAndAuthenticate({ email, otp, fullName, password, userAgent = 'Unknown' }) {
     const normalized = normalizeEmail(email);
     const existingCustomer = await authRepository.findCustomerByEmail(normalized);
 
@@ -122,13 +124,23 @@ export class AuthService {
         );
       }
 
+      // If password provided and customer doesn't have one set, update password
+      if (password && !existingCustomer.password_hash) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        await authRepository.updatePassword(existingCustomer.id, passwordHash);
+      }
+
       // Update last_login_at timestamp
       customer = await authRepository.updateLastLogin(existingCustomer.id);
     } else {
+      // Hash password if supplied during registration
+      const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+
       // Create new customer record upon verified OTP
       customer = await authRepository.createCustomer({
         email: normalized,
         fullName: fullName.trim(),
+        passwordHash,
       });
     }
 
@@ -160,6 +172,167 @@ export class AuthService {
       },
       token,
       maxAgeMs: durationMs,
+    };
+  }
+
+  /**
+   * Authenticates an existing customer via Email and Password
+   *
+   * @param {object} params
+   * @param {string} params.email
+   * @param {string} params.password
+   * @param {string} [params.userAgent]
+   * @returns {Promise<{ customer: object, token: string, maxAgeMs: number }>}
+   */
+  async loginWithPassword({ email, password, userAgent = 'Unknown' }) {
+    const normalized = normalizeEmail(email);
+    const customer = await authRepository.findCustomerByEmail(normalized);
+
+    // Constant-time check mitigation: if customer not found, return generic invalid credentials
+    if (!customer) {
+      throw new AppError('INVALID_CREDENTIALS', 'Invalid email or password.', 401);
+    }
+
+    // Account status check
+    if (customer.status !== 'ACTIVE') {
+      throw new AppError(
+        'ACCOUNT_DISABLED',
+        'This customer account is disabled or suspended. Please contact support.',
+        403
+      );
+    }
+
+    // Check if password has been set on this account
+    if (!customer.password_hash) {
+      throw new AppError(
+        'PASSWORD_NOT_SET',
+        'No password has been set for this account. Please log in using Email OTP or reset your password.',
+        400
+      );
+    }
+
+    // Verify password hash
+    const isMatch = await bcrypt.compare(password, customer.password_hash);
+    if (!isMatch) {
+      throw new AppError('INVALID_CREDENTIALS', 'Invalid email or password.', 401);
+    }
+
+    // Update last_login_at timestamp
+    await authRepository.updateLastLogin(customer.id);
+
+    // Create authentication session
+    const sessionId = crypto.randomUUID();
+    const durationMs = parseDurationToMs(env.jwt.sessionTtl);
+    const expiresAt = new Date(Date.now() + durationMs);
+
+    await authRepository.createSession({
+      id: sessionId,
+      customerId: customer.id,
+      userAgent,
+      expiresAt,
+    });
+
+    // Generate signed JWT
+    const token = signCustomerToken({
+      customerId: customer.id,
+      sessionId,
+    });
+
+    return {
+      customer: {
+        id: customer.id,
+        email: customer.email,
+        fullName: customer.full_name,
+        phone: customer.phone,
+        status: customer.status,
+      },
+      token,
+      maxAgeMs: durationMs,
+    };
+  }
+
+  /**
+   * Requests a password reset OTP for a customer account
+   * Returns a generic message to prevent email enumeration attacks.
+   *
+   * @param {object} params
+   * @param {string} params.email
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  async forgotPassword({ email }) {
+    const normalized = normalizeEmail(email);
+    const customer = await authRepository.findCustomerByEmail(normalized);
+
+    if (customer && customer.status === 'ACTIVE') {
+      await otpClient.sendOtp({
+        email: normalized,
+        purpose: 'RESET_PASSWORD',
+      });
+    } else if (customer && customer.status !== 'ACTIVE') {
+      console.warn(`[AuthService.forgotPassword] Inactive customer requested reset: ${normalized}`);
+    } else {
+      console.log(`[AuthService.forgotPassword] Reset requested for non-existent email: ${normalized}`);
+    }
+
+    return {
+      success: true,
+      message: 'If the email address is valid, a password reset code has been dispatched.',
+    };
+  }
+
+  /**
+   * Verifies reset OTP and updates customer password
+   * Revokes all active sessions for that customer.
+   *
+   * @param {object} params
+   * @param {string} params.email
+   * @param {string} params.otp
+   * @param {string} params.newPassword
+   * @returns {Promise<{ success: boolean, message: string, revokedSessions: number }>}
+   */
+  async resetPassword({ email, otp, newPassword }) {
+    const normalized = normalizeEmail(email);
+
+    // Verify OTP first via microservice
+    const verification = await otpClient.verifyOtp({
+      email: normalized,
+      otp,
+      purpose: 'RESET_PASSWORD',
+    });
+
+    if (!verification.valid) {
+      throw new AppError(
+        ERROR_CODES.OTP_INVALID,
+        verification.error || ERROR_MESSAGES[ERROR_CODES.OTP_INVALID],
+        400
+      );
+    }
+
+    // Look up customer
+    const customer = await authRepository.findCustomerByEmail(normalized);
+    if (!customer) {
+      throw new AppError('NOT_FOUND', 'Customer account not found.', 404);
+    }
+
+    if (customer.status !== 'ACTIVE') {
+      throw new AppError(
+        'ACCOUNT_DISABLED',
+        'This customer account is disabled or suspended. Please contact support.',
+        403
+      );
+    }
+
+    // Hash new password and update in database
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await authRepository.updatePassword(customer.id, passwordHash);
+
+    // Invalidate/revoke all active sessions for this customer to force re-authentication
+    const revokedSessions = await authRepository.revokeAllCustomerSessions(customer.id);
+
+    return {
+      success: true,
+      message: 'Password has been reset successfully. Please log in with your new password.',
+      revokedSessions,
     };
   }
 

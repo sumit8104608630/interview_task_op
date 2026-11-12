@@ -3,8 +3,8 @@ import { query, checkDatabaseConnection } from '../../database/connection.js';
 
 /**
  * Customer and Auth Session Data Access Repository
- * Handles all PostgreSQL queries for customer accounts and active authentication sessions.
- * Employs parameterized SQL exclusively and supports a lightweight in-memory fallback for offline test suites.
+ * Handles all PostgreSQL queries for customer accounts, password management, and sessions.
+ * Employs parameterized SQL queries and an in-memory fallback for isolated testing.
  */
 export class AuthRepository {
   constructor() {
@@ -45,7 +45,7 @@ export class AuthRepository {
 
     if (await this._usePostgres()) {
       const sql = `
-        SELECT id, email, full_name, phone, email_verified_at, status, last_login_at, created_at, updated_at
+        SELECT id, email, full_name, password_hash, phone, email_verified_at, status, last_login_at, created_at, updated_at
         FROM customers
         WHERE LOWER(email) = LOWER($1)
         LIMIT 1;
@@ -71,7 +71,7 @@ export class AuthRepository {
   async findCustomerById(id) {
     if (await this._usePostgres()) {
       const sql = `
-        SELECT id, email, full_name, phone, email_verified_at, status, last_login_at, created_at, updated_at
+        SELECT id, email, full_name, password_hash, phone, email_verified_at, status, last_login_at, created_at, updated_at
         FROM customers
         WHERE id = $1
         LIMIT 1;
@@ -92,26 +92,28 @@ export class AuthRepository {
    * @param {string} [params.id]
    * @param {string} params.email
    * @param {string} params.fullName
+   * @param {string|null} [params.passwordHash]
    * @param {string} [params.phone]
    * @returns {Promise<object>} Created or existing customer row
    */
-  async createCustomer({ id = crypto.randomUUID(), email, fullName, phone = null }) {
+  async createCustomer({ id = crypto.randomUUID(), email, fullName, passwordHash = null, phone = null }) {
     const normalized = email.trim().toLowerCase();
     const now = new Date();
 
     if (await this._usePostgres()) {
       const sql = `
         INSERT INTO customers (
-          id, email, full_name, phone, email_verified_at, status, last_login_at, created_at, updated_at
+          id, email, full_name, password_hash, phone, email_verified_at, status, last_login_at, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $5, $5, $5)
+        VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $6, $6, $6)
         ON CONFLICT (LOWER(email)) DO UPDATE
           SET last_login_at = EXCLUDED.last_login_at,
               email_verified_at = COALESCE(customers.email_verified_at, EXCLUDED.email_verified_at),
+              password_hash = COALESCE(EXCLUDED.password_hash, customers.password_hash),
               updated_at = CURRENT_TIMESTAMP
         RETURNING *;
       `;
-      const result = await query(sql, [id, normalized, fullName.trim(), phone, now]);
+      const result = await query(sql, [id, normalized, fullName.trim(), passwordHash, phone, now]);
       return result.rows[0];
     }
 
@@ -120,6 +122,7 @@ export class AuthRepository {
       if (existing.email.toLowerCase() === normalized) {
         existing.last_login_at = now;
         existing.email_verified_at = existing.email_verified_at || now;
+        if (passwordHash) existing.password_hash = passwordHash;
         existing.updated_at = now;
         return { ...existing };
       }
@@ -129,6 +132,7 @@ export class AuthRepository {
       id,
       email: normalized,
       full_name: fullName.trim(),
+      password_hash: passwordHash,
       phone,
       email_verified_at: now,
       status: 'ACTIVE',
@@ -138,6 +142,35 @@ export class AuthRepository {
     };
     this.inMemoryCustomers.set(id, newCustomer);
     return { ...newCustomer };
+  }
+
+  /**
+   * Updates customer password hash
+   * @param {string} customerId
+   * @param {string} passwordHash
+   * @returns {Promise<object|null>}
+   */
+  async updatePassword(customerId, passwordHash) {
+    const now = new Date();
+
+    if (await this._usePostgres()) {
+      const sql = `
+        UPDATE customers
+        SET password_hash = $1, updated_at = $2
+        WHERE id = $3
+        RETURNING *;
+      `;
+      const result = await query(sql, [passwordHash, now, customerId]);
+      return result.rows[0] || null;
+    }
+
+    const customer = this.inMemoryCustomers.get(customerId);
+    if (customer) {
+      customer.password_hash = passwordHash;
+      customer.updated_at = now;
+      return { ...customer };
+    }
+    return null;
   }
 
   /**
@@ -248,6 +281,7 @@ export class AuthRepository {
           c.id,
           c.email,
           c.full_name,
+          c.password_hash,
           c.phone,
           c.status,
           c.last_login_at
@@ -275,6 +309,7 @@ export class AuthRepository {
       id: customer.id,
       email: customer.email,
       full_name: customer.full_name,
+      password_hash: customer.password_hash,
       phone: customer.phone,
       status: customer.status,
       last_login_at: customer.last_login_at,
@@ -323,6 +358,34 @@ export class AuthRepository {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Revokes all active sessions for a customer (e.g. upon password reset)
+   * @param {string} customerId
+   * @returns {Promise<number>} Number of sessions revoked
+   */
+  async revokeAllCustomerSessions(customerId) {
+    const now = new Date();
+
+    if (await this._usePostgres()) {
+      const sql = `
+        UPDATE auth_sessions
+        SET revoked_at = $1
+        WHERE customer_id = $2 AND revoked_at IS NULL;
+      `;
+      const result = await query(sql, [now, customerId]);
+      return result.rowCount;
+    }
+
+    let count = 0;
+    for (const session of this.inMemorySessions.values()) {
+      if (session.customer_id === customerId && !session.revoked_at) {
+        session.revoked_at = now;
+        count += 1;
+      }
+    }
+    return count;
   }
 }
 

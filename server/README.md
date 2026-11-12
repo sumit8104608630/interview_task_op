@@ -112,7 +112,8 @@ server/
 │   ├── database/                       # Database connection and data seeding
 │   │   ├── connection.js               # pg.Pool instance & health-check runner
 │   │   ├── migrations/                 # Versioned SQL migration scripts
-│   │   │   └── 001_create_customers_and_auth_sessions.sql
+│   │   │   ├── 001_create_customers_and_auth_sessions.sql
+│   │   │   └── 002_add_password_hash_to_customers.sql
 │   │   └── seeds/
 │   │       ├── data/
 │   │       │   └── hotels.json         # Fictional dataset (5 detailed sample hotels)
@@ -126,16 +127,16 @@ server/
 │       ├── jwt.js                      # Cryptographic JWT signing & strict verification
 │       └── normalizeEmail.js           # Email lower-casing & trimming utility
 │
-├── tests/                              # Automated test suites (37 passing tests)
+├── tests/                              # Automated test suites (46 passing tests)
 │   ├── fixtures/
 │   │   └── sampleHotel.json            # Mock dataset for test isolation
 │   ├── unit/
 │   │   ├── auth.jwt.test.js            # JWT signing, claims, expiration, and secret tests
-│   │   ├── auth.service.test.js        # Registration, login, duplicate check, and session tests
+│   │   ├── auth.service.test.js        # Registration, password login, forgot/reset, sessions
 │   │   ├── dateUtils.test.js           # Calendar stay date arithmetic tests
 │   │   └── generateBookingReference.test.js
 │   └── integration/
-│       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, logout, CSRF)
+│       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, password, reset)
 │       └── health.test.js              # Health-check & core route integration tests
 │
 ├── postman/
@@ -153,24 +154,36 @@ server/
 ## 3. Customer Authentication System (Phase 1)
 
 ### Overview
-Passwordless authentication using email One-Time Passwords (OTP). No passwords are used or stored.
+Authentication system supporting passwordless Email OTP verification, optional password registration, password login, and forgot/reset password flows with session revocation.
 
 ### Endpoints
 * **`POST /api/auth/send-otp`**
-  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe" }`
+  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe", "password"?: "..." }`
   - **Login payload:** `{ "email": "customer@example.com" }`
   - Returns a generic message to prevent email enumeration attacks:
     `"If the email address is valid, a one-time verification code has been dispatched."`
   - Rate limited to 5 requests per 10 minutes per IP/email.
 * **`POST /api/auth/verify-otp`**
-  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe", "otp": "123456" }`
+  - **Registration payload:** `{ "email": "customer@example.com", "fullName": "John Doe", "otp": "123456", "password"?: "..." }`
   - **Login payload:** `{ "email": "customer@example.com", "otp": "123456" }`
   - Upon successful verification:
-    - New customer: created in `customers` table with `status = 'ACTIVE'`, `email_verified_at = NOW()`.
+    - New customer: created in `customers` table with `status = 'ACTIVE'`, `email_verified_at = NOW()`, and bcrypt `password_hash` if provided.
     - Existing customer: updates `last_login_at = NOW()`.
     - Generates an `auth_sessions` record in PostgreSQL.
     - Signs a JWT and stores it in an `HttpOnly` cookie (`auth_token`).
     - Issues a CSRF cookie (`csrf_token`) for the client.
+* **`POST /api/auth/login`**
+  - **Payload:** `{ "email": "customer@example.com", "password": "SecurePassword123" }`
+  - Verifies credentials against bcrypt `password_hash`.
+  - Creates a new `auth_sessions` record and issues an `HttpOnly` cookie (`auth_token`).
+* **`POST /api/auth/forgot-password`**
+  - **Payload:** `{ "email": "customer@example.com" }`
+  - Dispatches a reset OTP via the microservice.
+  - Returns generic message to prevent enumeration. Rate limited.
+* **`POST /api/auth/reset-password`**
+  - **Payload:** `{ "email": "customer@example.com", "otp": "123456", "newPassword": "NewPassword123" }`
+  - Verifies OTP, hashes new password with bcrypt, updates `password_hash`.
+  - Revokes all existing active sessions for this customer to force re-authentication.
 * **`GET /api/auth/me`**
   - Authenticated via `HttpOnly` cookie.
   - Verifies JWT signature, expiration, issuer, audience, and algorithm.
@@ -222,6 +235,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (37 tests across 6 suites)
+# Automated test suite (46 tests across 6 suites)
 npm test
 ```

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
     "name": "Hotel Booking Portal - Customer Authentication",
-    "description": "Postman API collection for passwordless customer authentication using Email OTP, HttpOnly cookies, JWT, and CSRF protection.",
+    "description": "Postman API collection for customer authentication using Email OTP, Password login, Forgot/Reset Password, HttpOnly cookies, JWT, and CSRF protection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -41,7 +41,7 @@
       }
     },
     {
-      "name": "2. Verify Registration OTP",
+      "name": "2. Verify Registration OTP (Passwordless)",
       "event": [
         {
           "listen": "test",
@@ -77,7 +77,79 @@
       }
     },
     {
-      "name": "3. Send Login OTP (Existing Customer)",
+      "name": "3. Verify Registration OTP with Password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.data && json.data.csrfToken) {",
+              "    pm.collectionVariables.set('csrfToken', json.data.csrfToken);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer.password@example.com\",\n  \"fullName\": \"Jane Doe\",\n  \"password\": \"SecurePass123\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-otp"]
+        },
+        "description": "Verifies registration OTP and securely hashes and stores the customer password."
+      }
+    },
+    {
+      "name": "4. Login with Email and Password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.data && json.data.csrfToken) {",
+              "    pm.collectionVariables.set('csrfToken', json.data.csrfToken);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer.password@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        },
+        "description": "Authenticates customer via email and bcrypt password verification, returning an HttpOnly session cookie."
+      }
+    },
+    {
+      "name": "5. Send Login OTP (Passwordless Login)",
       "request": {
         "method": "POST",
         "header": [
@@ -99,7 +171,7 @@
       }
     },
     {
-      "name": "4. Verify Login OTP",
+      "name": "6. Verify Login OTP",
       "event": [
         {
           "listen": "test",
@@ -135,7 +207,51 @@
       }
     },
     {
-      "name": "5. Get Current Customer Profile (/me)",
+      "name": "7. Forgot Password (Request Reset Code)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer.password@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/forgot-password",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "forgot-password"]
+        },
+        "description": "Dispatches a password reset OTP to the customer's email. Returns generic response to prevent email enumeration."
+      }
+    },
+    {
+      "name": "8. Reset Password (Verify OTP + Set New Password)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"customer.password@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"BrandNewPass456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/reset-password",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "reset-password"]
+        },
+        "description": "Verifies reset OTP, updates the hashed password, and revokes all active sessions for security."
+      }
+    },
+    {
+      "name": "9. Get Current Customer Profile (/me)",
       "request": {
         "method": "GET",
         "header": [],
@@ -148,7 +264,7 @@
       }
     },
     {
-      "name": "6. Logout Customer",
+      "name": "10. Logout Customer",
       "request": {
         "method": "POST",
         "header": [
@@ -167,7 +283,7 @@
       }
     },
     {
-      "name": "7. Get Current Customer After Logout (Expect 401)",
+      "name": "11. Get Current Customer After Logout (Expect 401)",
       "request": {
         "method": "GET",
         "header": [],

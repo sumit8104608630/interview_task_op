@@ -36,13 +36,14 @@ export class AuthController {
    * Verifies OTP, persists customer (if new), creates auth session, and sets HttpOnly cookie
    */
   verifyOtp = asyncHandler(async (req, res) => {
-    const { email, otp, fullName } = req.body;
+    const { email, otp, fullName, password } = req.body;
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
     const { customer, token, maxAgeMs } = await authService.verifyOtpAndAuthenticate({
       email,
       otp,
       fullName,
+      password,
       userAgent,
     });
 
@@ -58,6 +59,72 @@ export class AuthController {
       data: {
         customer,
         csrfToken,
+      },
+    });
+  });
+
+  /**
+   * POST /api/auth/login
+   * Authenticates customer via Email and Password
+   */
+  login = asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    const { customer, token, maxAgeMs } = await authService.loginWithPassword({
+      email,
+      password,
+      userAgent,
+    });
+
+    // Store JWT in HttpOnly cookie
+    setAuthCookie(res, token, maxAgeMs);
+
+    // Issue CSRF cookie
+    const csrfToken = setCsrfCookie(res);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: 'Login successful.',
+      data: {
+        customer,
+        csrfToken,
+      },
+    });
+  });
+
+  /**
+   * POST /api/auth/forgot-password
+   * Dispatches a password reset OTP code
+   */
+  forgotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    const result = await authService.forgotPassword({ email });
+
+    setCsrfCookie(res);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/auth/reset-password
+   * Verifies reset OTP and updates customer password
+   */
+  resetPassword = asyncHandler(async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    const result = await authService.resetPassword({ email, otp, newPassword });
+
+    // Clear any existing cookie so the user must log in with their new password
+    clearAuthCookie(res);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: result.message,
+      data: {
+        revokedSessions: result.revokedSessions,
       },
     });
   });

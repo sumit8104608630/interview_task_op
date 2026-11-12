@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS customers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT NOT NULL,
     full_name TEXT NOT NULL,
+    password_hash TEXT,
     phone TEXT,
     email_verified_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
