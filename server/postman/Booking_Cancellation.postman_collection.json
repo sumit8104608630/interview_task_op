@@ -1,0 +1,321 @@
+{
+  "info": {
+    "name": "Hotel Booking Portal - Phase 5: Booking Retrieval & Cancellation",
+    "_postman_id": "e8b23c59-7154-482a-bc91-28564028d7e2",
+    "description": "Production-grade Postman collection for Phase 5: Booking Lookup, Authenticated Customer History, OTP-verified Cancellation, Single-use Scoped Proof, and Atomic Inventory Restoration.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "bookingReference",
+      "value": "HBP-TESTREF1",
+      "type": "string"
+    },
+    {
+      "key": "guestEmail",
+      "value": "jane.doe@example.com",
+      "type": "string"
+    },
+    {
+      "key": "cancellationProof",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Booking Lookup (Reference & Email)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Returns booking reference and status', function () {",
+              "    pm.expect(json.success).to.be.true;",
+              "    pm.expect(json.data.bookingReference).to.be.a('string');",
+              "    pm.expect(json.data.status).to.be.oneOf(['CONFIRMED', 'CANCELLED']);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"{{guestEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/lookup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "lookup"]
+        },
+        "description": "Retrieves booking details for a guest or customer when both reference and email match. Returns hotel, room, stay dates, guest details, and pricing."
+      }
+    },
+    {
+      "name": "2. Booking Lookup - Mismatched Email (Safe 404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 404 (No Information Leakage)', function () {",
+              "    pm.response.to.have.status(404);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.success).to.be.false;",
+              "    pm.expect(json.error.code).to.eql('BOOKING_NOT_FOUND');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"intruder@unauthorized.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/lookup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "lookup"]
+        },
+        "description": "Verifies enumeration protection: Returns generic 404 BOOKING_NOT_FOUND when email does not match the booking guest."
+      }
+    },
+    {
+      "name": "3. Authenticated Customer Bookings (My Bookings)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200 or 401 if unauthenticated', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 401]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/my-bookings?page=1&limit=10&status=CONFIRMED",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "my-bookings"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" },
+            { "key": "status", "value": "CONFIRMED" }
+          ]
+        },
+        "description": "Retrieves the authenticated customer's booking history using the verified session cookie. Strictly forbids customerId in query parameters."
+      }
+    },
+    {
+      "name": "4. Customer Bookings - Reject customerId In Query (Tampering Guard)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400 for tampering attempt', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.error.code).to.eql('VALIDATION_ERROR');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/my-bookings?customerId=00000000-0000-0000-0000-000000000000",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "my-bookings"],
+          "query": [
+            { "key": "customerId", "value": "00000000-0000-0000-0000-000000000000" }
+          ]
+        },
+        "description": "Ensures that attempting to supply customerId via query parameters is rejected immediately with 400."
+      }
+    },
+    {
+      "name": "5. Request Cancellation OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('OTP dispatched response', function () {",
+              "    pm.expect(json.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"{{guestEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/cancellation/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "cancellation", "send-otp"]
+        },
+        "description": "Dispatches an OTP to the verified guest email address for cancellation authorization. Also checks the cancellation deadline against hotel timezone."
+      }
+    },
+    {
+      "name": "6. Verify Cancellation OTP & Obtain Proof",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "if (json.data && json.data.cancellationProof) {",
+              "    pm.collectionVariables.set('cancellationProof', json.data.cancellationProof);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"{{guestEmail}}\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/cancellation/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "cancellation", "verify-otp"]
+        },
+        "description": "Verifies the cancellation OTP with the microservice and generates a single-use, 15-minute cryptographic cancellation proof token bound to this exact booking."
+      }
+    },
+    {
+      "name": "7. Confirm Cancellation (Atomically Restores Inventory)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Booking is marked CANCELLED and proof consumed', function () {",
+              "    pm.expect(json.success).to.be.true;",
+              "    pm.expect(json.data.status).to.eql('CANCELLED');",
+              "    pm.expect(json.data.cancelledAt).to.be.a('string');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"{{guestEmail}}\",\n  \"cancellationProof\": \"{{cancellationProof}}\",\n  \"reason\": \"Change of travel plans\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/cancellation/cancel",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "cancellation", "cancel"]
+        },
+        "description": "Atomically consumes the proof, updates status to CANCELLED, restores room inventory for all occupied nights [checkIn, checkOut), and enqueues an outbox cancellation event."
+      }
+    },
+    {
+      "name": "8. Duplicate Cancellation Attempt (Proof Replay Rejection)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400 for already consumed proof', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.error.code).to.eql('INVALID_CANCELLATION_PROOF');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"{{guestEmail}}\",\n  \"cancellationProof\": \"{{cancellationProof}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/cancellation/cancel",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "cancellation", "cancel"]
+        },
+        "description": "Demonstrates single-use invariant: Submitting an already consumed proof fails immediately with 400 INVALID_CANCELLATION_PROOF."
+      }
+    }
+  ]
+}

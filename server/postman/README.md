@@ -8,6 +8,28 @@ This directory provides Postman collections and instructions for validating the 
 2. **`Hotel_Catalogue.postman_collection.json`**: Complete hotel catalogue management suite (Hotels listing with pagination, city/location filters, sorting by price/name, hotel details by UUID/slug, room categories, locations with active hotel counts, and amenities).
 3. **`Hotel_Search_Availability.postman_collection.json`**: Date-wise hotel search and room inventory availability suite (Date range validation, checkout-exclusive inventory, multi-room requests, guest capacity, price/amenities filters, sorting, pagination, and room availability breakdowns).
 4. **`Booking_Creation.postman_collection.json`**: Booking creation and guest checkout suite (Atomic multi-room booking, registered vs guest checkout, server-side decimal pricing, idempotency key deduplication, and booking reference lookup).
+5. **`Booking_Cancellation.postman_collection.json`**: Booking retrieval and secure cancellation suite (Guest lookup, enumeration protection, customer booking history, cancellation OTP verification, single-use scoped proof, and atomic inventory restoration).
+
+---
+
+## 1. Testing Booking Retrieval & Cancellation in Postman (Phase 5)
+
+Import `Booking_Cancellation.postman_collection.json` into Postman. Pre-configured variables: `baseUrl`, `bookingReference`, `guestEmail`, `cancellationProof`.
+
+### Retrieval & Cancellation Endpoints
+
+| Step | Request Name | Method | Path | Expected Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Booking Lookup | `POST` | `/api/bookings/lookup` | `200 OK` (Matches reference and guest email, returns hotel, room, and status) |
+| 2 | Booking Lookup (Email Mismatch) | `POST` | `/api/bookings/lookup` | `404 Not Found` (`BOOKING_NOT_FOUND` — safe generic error without leaking reference validity) |
+| 3 | Authenticated Customer History | `GET` | `/api/bookings/my-bookings?page=1&limit=10&status=CONFIRMED` | `200 OK` (Only authenticated customer's bookings, supports status filter) |
+| 4 | Block customerId in Query | `GET` | `/api/bookings/my-bookings?customerId=...` | `400 Bad Request` (`VALIDATION_ERROR` — prevents IDOR/query tampering) |
+| 5 | Request Cancellation OTP | `POST` | `/api/bookings/cancellation/send-otp` | `200 OK` (Dispatches OTP to guest email; validates cancellation cutoff deadline) |
+| 6 | Verify Cancellation OTP | `POST` | `/api/bookings/cancellation/verify-otp` | `200 OK` (Issues single-use, 15-minute `cancellationProof` scoped to booking) |
+| 7 | Confirm Cancellation | `POST` | `/api/bookings/cancellation/cancel` | `200 OK` (Atomically updates status to `CANCELLED`, restores inventory, marks proof consumed) |
+| 8 | Duplicate Cancel Attempt | `POST` | `/api/bookings/cancellation/cancel` | `400 Bad Request` (`INVALID_CANCELLATION_PROOF` — proof replay blocked) |
+
+*All endpoints are also accessible via `/api/v1/bookings/...` for complete backward and frontend compatibility.*
 
 ---
 

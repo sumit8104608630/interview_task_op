@@ -167,6 +167,20 @@ export const validateStayDates = (
   return { valid: true, nights };
 };
 
+/**
+ * Checks whether a booking is eligible for cancellation based on hotel local date policy.
+ * Default policy: cancellation must occur strictly before the check-in date commences in hotel timezone.
+ *
+ * @param {string} checkIn - 'YYYY-MM-DD'
+ * @param {string} [timezone='Asia/Kolkata']
+ * @returns {boolean} True if booking can be cancelled
+ */
+export const isCancellationEligible = (checkIn, timezone = 'Asia/Kolkata') => {
+  if (!isValidIsoDate(checkIn)) return false;
+  const today = getTodayIsoDate(timezone);
+  return today < checkIn;
+};
+
 export default {
   isValidIsoDate,
   parseIsoDateToUtc,
@@ -174,4 +188,5 @@ export default {
   calculateNights,
   getStayDates,
   validateStayDates,
+  isCancellationEligible,
 };

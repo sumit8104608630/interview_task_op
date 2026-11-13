@@ -322,7 +322,57 @@ Enterprise-grade booking engine handling both registered customer sessions and f
 
 ---
 
-## 7. Getting Started
+## 7. Booking Retrieval and Secure Cancellation System (Phase 5)
+
+### Overview
+Complete retrieval and cancellation engine supporting both authenticated registered customers and guest checkout bookings. Implements email-verified OTP authorization, single-use cryptographically hashed proof tokens, atomic inventory restoration across all occupied nights $[checkIn, checkOut)$, cancellation cutoff deadline enforcement against hotel-local timezones, enumeration attack mitigation, and asynchronous cancellation outbox notifications.
+
+### Core Architecture & Invariants
+- **Booking Lookup & Anti-Enumeration Protection:**
+  - `POST /api/bookings/lookup`: Requires both `bookingReference` and `email`.
+  - Normalizes email (`trim().toLowerCase()`).
+  - Verifies email against `booking_guests` or associated customer account.
+  - If either the reference or email is invalid, returns generic 404 `BOOKING_NOT_FOUND` to prevent attackers from probing valid booking references.
+- **Authenticated Customer History (`my-bookings`):**
+  - `GET /api/bookings/my-bookings`: Requires active customer authentication session via HttpOnly cookie.
+  - Customer ID is extracted strictly from `req.customer.id` (session context).
+  - Attempting to pass `customerId` in query parameters is explicitly forbidden and rejected with 400 `VALIDATION_ERROR`.
+  - Supports status filtering (`status=CONFIRMED|CANCELLED`) and pagination (`page`, `limit`, `totalPages`, `total`).
+- **Cryptographic Single-Use Cancellation Proof:**
+  - Cancellation requires verifying an OTP dispatched to the registered guest email.
+  - Upon successful OTP verification, issues a short-lived (15 minutes), single-use cancellation proof token.
+  - Scoped strictly to the specific booking (`guest_sessions` table with `purpose = 'CANCELLATION'`, `booking_id`, and `token_hash = sha256(token)`).
+  - A proof issued for Booking A cannot cancel Booking B.
+  - When the cancellation is executed, the proof is atomically marked `consumed_at = CURRENT_TIMESTAMP` inside the database transaction. Any attempt to replay or reuse the proof is rejected with 400 `INVALID_CANCELLATION_PROOF`.
+- **Cancellation Cutoff Deadline:**
+  - Evaluated against the hotel's configured timezone (`Asia/Kolkata`).
+  - Cancellations are prohibited if the current date is on or after the stay's check-in date (`CANCELLATION_DEADLINE_PASSED`).
+- **Atomic Inventory Restoration:**
+  - Handled inside a single PostgreSQL transaction (`BEGIN ... COMMIT ... ROLLBACK`) with row-level locks on `room_inventory`.
+  - Restores `available_rooms = available_rooms + bookings.rooms_count` for every occupied night $[checkIn, checkOut)$.
+  - Idempotent and race-condition protected: only bookings in `CONFIRMED` status can be cancelled; already-cancelled bookings return 400 `BOOKING_ALREADY_CANCELLED` without double-restoring inventory.
+  - Outbox pattern: enqueues `BOOKING_CANCELLATION` event into `notification_outbox` within the atomic transaction.
+
+### Retrieval & Cancellation Endpoints
+* **`POST /api/bookings/lookup`**
+  - **Payload:** `{ bookingReference, email }`.
+  - Returns booking details (hotel, room, check-in, check-out, nights, rooms, price, total, status).
+* **`GET /api/bookings/my-bookings`**
+  - **Query parameters:** `page`, `limit`, `status`.
+  - Returns paginated list of bookings owned by the authenticated customer.
+* **`POST /api/bookings/cancellation/send-otp`** *(also `POST /api/bookings/:reference/cancellation-otp`)*
+  - **Payload:** `{ bookingReference, email }`.
+  - Dispatches OTP to registered guest email and verifies cancellation eligibility.
+* **`POST /api/bookings/cancellation/verify-otp`**
+  - **Payload:** `{ bookingReference, email, otp }`.
+  - Verifies OTP and returns `{ cancellationProof, expiresAt, bookingReference }`.
+* **`POST /api/bookings/cancellation/cancel`** *(also `POST /api/bookings/:reference/cancel`)*
+  - **Payload:** `{ bookingReference, email, cancellationProof, reason? }`.
+  - Atomically cancels booking, consumes proof, restores inventory, and enqueues outbox notification.
+
+---
+
+## 8. Getting Started
 
 ### Installation
 ```bash
@@ -353,6 +403,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (101 tests across 9 suites)
+# Automated test suite (113 tests across 10 suites)
 npm test
 ```

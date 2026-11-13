@@ -1,9 +1,10 @@
 import { getClient, query, checkDatabaseConnection } from '../database/connection.js';
 import { roomRepository } from './room.repository.js';
 import { generateBookingReference } from '../utils/generateBookingReference.js';
-import { getStayDates, calculateNights } from '../utils/dateUtils.js';
+import { getStayDates, calculateNights, isCancellationEligible } from '../utils/dateUtils.js';
 import { AppError } from '../middleware/error.middleware.js';
-import { ERROR_CODES } from '../constants/errorMessages.js';
+import { ERROR_CODES, ERROR_MESSAGES } from '../constants/errorMessages.js';
+import crypto from 'crypto';
 
 /**
  * Async Mutex for in-memory concurrency control
@@ -34,6 +35,7 @@ export class BookingRepository {
     this.forceInMemory = false;
     this.inMemoryBookings = new Map();
     this.inMemoryGuests = new Map();
+    this.inMemoryGuestSessions = new Map();
     this.inMemoryOutbox = [];
     this.mutex = new AsyncMutex();
   }
@@ -48,6 +50,7 @@ export class BookingRepository {
   reset() {
     this.inMemoryBookings.clear();
     this.inMemoryGuests.clear();
+    this.inMemoryGuestSessions.clear();
     this.inMemoryOutbox = [];
   }
 
@@ -592,6 +595,447 @@ export class BookingRepository {
     }
 
     return booking;
+  }
+
+  /**
+   * Retrieves all bookings belonging to a registered customer with pagination and status filter
+   *
+   * @param {object} params
+   * @param {string} params.customerId
+   * @param {number} [params.page=1]
+   * @param {number} [params.limit=10]
+   * @param {'CONFIRMED'|'CANCELLED'|null} [params.status=null]
+   * @returns {Promise<{ bookings: Array<object>, total: number }>}
+   */
+  async findByCustomerId({ customerId, page = 1, limit = 10, status = null }) {
+    if (!customerId) return { bookings: [], total: 0 };
+
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+    const offset = (safePage - 1) * safeLimit;
+
+    if (await this._usePostgres()) {
+      const sql = `
+        SELECT 
+          b.id,
+          b.booking_reference AS "bookingReference",
+          b.customer_id AS "customerId",
+          b.room_type_id AS "roomTypeId",
+          b.check_in AS "checkIn",
+          b.check_out AS "checkOut",
+          b.nights,
+          b.rooms_count AS "roomsCount",
+          b.nightly_price_snapshot AS "nightlyPriceSnapshot",
+          b.total_amount AS "totalAmount",
+          b.status,
+          b.created_at AS "createdAt",
+          b.cancelled_at AS "cancelledAt",
+          bg.full_name AS "guestName",
+          bg.email AS "guestEmail",
+          bg.phone AS "guestPhone",
+          rt.name AS "roomName",
+          h.name AS "hotelName",
+          h.id AS "hotelId"
+        FROM bookings b
+        JOIN booking_guests bg ON bg.booking_id = b.id
+        JOIN room_types rt ON rt.id = b.room_type_id
+        JOIN hotels h ON h.id = rt.hotel_id
+        WHERE b.customer_id = $1
+          AND ($2::text IS NULL OR b.status = $2)
+        ORDER BY b.created_at DESC
+        LIMIT $3 OFFSET $4;
+      `;
+
+      const countSql = `
+        SELECT COUNT(*) AS total
+        FROM bookings b
+        WHERE b.customer_id = $1
+          AND ($2::text IS NULL OR b.status = $2);
+      `;
+
+      const [res, countRes] = await Promise.all([
+        query(sql, [customerId, status, safeLimit, offset]),
+        query(countSql, [customerId, status]),
+      ]);
+
+      const total = parseInt(countRes.rows[0]?.total || 0, 10);
+      const bookings = res.rows.map((row) => ({
+        ...row,
+        nightlyPriceSnapshot: Number(row.nightlyPriceSnapshot),
+        totalAmount: Number(row.totalAmount),
+        guest: {
+          fullName: row.guestName,
+          email: row.guestEmail,
+          phone: row.guestPhone,
+        },
+      }));
+
+      return { bookings, total };
+    }
+
+    // In-memory fallback
+    let list = Array.from(this.inMemoryBookings.values()).filter(
+      (b) => b.customerId === customerId
+    );
+
+    if (status) {
+      list = list.filter((b) => b.status === status);
+    }
+
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = list.length;
+    const paginated = list.slice(offset, offset + safeLimit);
+
+    return { bookings: paginated, total };
+  }
+
+  /**
+   * Creates a single-use, booking-scoped authorization session / proof
+   *
+   * @param {object} params
+   * @param {string} params.bookingId
+   * @param {string} params.email
+   * @param {'CANCELLATION'|'BOOKING'} params.purpose
+   * @param {number} [params.expiresInMinutes=15]
+   * @returns {Promise<{ token: string, expiresAt: string }>}
+   */
+  async createGuestSession({ bookingId, email, purpose = 'CANCELLATION', expiresInMinutes = 15 }) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString();
+
+    if (await this._usePostgres()) {
+      const sql = `
+        INSERT INTO guest_sessions (booking_id, email, purpose, token_hash, expires_at)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, expires_at;
+      `;
+      await query(sql, [bookingId, email.trim().toLowerCase(), purpose, tokenHash, expiresAt]);
+      return { token, expiresAt };
+    }
+
+    // In-memory fallback
+    const id = crypto.randomUUID();
+    this.inMemoryGuestSessions.set(token, {
+      id,
+      bookingId,
+      email: email.trim().toLowerCase(),
+      purpose,
+      token,
+      tokenHash,
+      expiresAt,
+      consumedAt: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { token, expiresAt };
+  }
+
+  /**
+   * Atomically verifies cancellation proof, locks booking, validates deadline,
+   * updates status to CANCELLED, restores room inventory, and enqueues outbox event.
+   *
+   * @param {object} params
+   * @param {string} params.bookingReference
+   * @param {string} params.email
+   * @param {string} params.cancellationProof
+   * @param {string} [params.reason]
+   * @returns {Promise<object>} Cancelled booking details
+   */
+  async cancelBookingAtomic({ bookingReference, email, cancellationProof, reason = null }) {
+    if (!bookingReference || !email) {
+      throw new AppError(ERROR_CODES.VALIDATION_ERROR, 'Booking reference and email are required.', 400);
+    }
+    if (!cancellationProof) {
+      throw new AppError(ERROR_CODES.INVALID_CANCELLATION_PROOF, 'Cancellation authorization proof is required.', 400);
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (await this._usePostgres()) {
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+
+        // 1. Lock the booking and retrieve room + hotel timezone
+        const bookingSql = `
+          SELECT 
+            b.*,
+            bg.email AS guest_email,
+            bg.full_name AS guest_name,
+            rt.id AS room_type_id,
+            rt.name AS room_name,
+            h.name AS hotel_name,
+            l.timezone
+          FROM bookings b
+          JOIN booking_guests bg ON bg.booking_id = b.id
+          JOIN room_types rt ON rt.id = b.room_type_id
+          JOIN hotels h ON h.id = rt.hotel_id
+          JOIN locations l ON l.id = h.location_id
+          WHERE b.booking_reference = $1
+          FOR UPDATE;
+        `;
+        const bookingRes = await client.query(bookingSql, [bookingReference.trim()]);
+
+        if (bookingRes.rows.length === 0) {
+          throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND], 404);
+        }
+
+        const b = bookingRes.rows[0];
+
+        // Ensure email matches guest email (generic 404 to avoid enumeration)
+        if (b.guest_email.trim().toLowerCase() !== normalizedEmail) {
+          throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND], 404);
+        }
+
+        // Prevent duplicate cancellation
+        if (b.status === 'CANCELLED') {
+          throw new AppError(
+            ERROR_CODES.BOOKING_ALREADY_CANCELLED,
+            ERROR_MESSAGES[ERROR_CODES.BOOKING_ALREADY_CANCELLED],
+            400
+          );
+        }
+
+        // 2. Validate cancellation proof from guest_sessions table
+        const tokenHash = crypto.createHash('sha256').update(cancellationProof.trim()).digest('hex');
+        const sessionSql = `
+          SELECT *
+          FROM guest_sessions
+          WHERE booking_id = $1
+            AND purpose = 'CANCELLATION'
+            AND (token_hash = $2 OR token_hash = $3)
+          FOR UPDATE;
+        `;
+        const sessionRes = await client.query(sessionSql, [b.id, tokenHash, cancellationProof.trim()]);
+
+        if (sessionRes.rows.length === 0) {
+          throw new AppError(
+            ERROR_CODES.INVALID_CANCELLATION_PROOF,
+            ERROR_MESSAGES[ERROR_CODES.INVALID_CANCELLATION_PROOF],
+            400
+          );
+        }
+
+        const session = sessionRes.rows[0];
+
+        // Check single-use: must not have been consumed
+        if (session.consumed_at) {
+          throw new AppError(
+            ERROR_CODES.INVALID_CANCELLATION_PROOF,
+            'This cancellation proof has already been consumed.',
+            400
+          );
+        }
+
+        // Check expiration
+        if (new Date(session.expires_at).getTime() < Date.now()) {
+          throw new AppError(
+            ERROR_CODES.EXPIRED_CANCELLATION_PROOF,
+            ERROR_MESSAGES[ERROR_CODES.EXPIRED_CANCELLATION_PROOF],
+            400
+          );
+        }
+
+        // 3. Verify cancellation deadline based on hotel local timezone
+        const hotelTimezone = b.timezone || 'Asia/Kolkata';
+        const eligible = isCancellationEligible(b.check_in, hotelTimezone);
+
+        if (!eligible) {
+          throw new AppError(
+            ERROR_CODES.CANCELLATION_DEADLINE_PASSED,
+            ERROR_MESSAGES[ERROR_CODES.CANCELLATION_DEADLINE_PASSED],
+            400
+          );
+        }
+
+        // 4. Mark proof as consumed (single use)
+        await client.query(
+          `UPDATE guest_sessions SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+          [session.id]
+        );
+
+        // 5. Update booking status to CANCELLED
+        await client.query(
+          `UPDATE bookings
+           SET status = 'CANCELLED',
+               cancelled_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1;`,
+          [b.id]
+        );
+
+        // 6. Restore inventory for all occupied stay nights [checkIn, checkOut)
+        const roomsToRestore = b.rooms_count || 1;
+        await client.query(
+          `UPDATE room_inventory
+           SET available_rooms = available_rooms + $1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE room_type_id = $2
+             AND inventory_date >= $3::date
+             AND inventory_date < $4::date;`,
+          [roomsToRestore, b.room_type_id, b.check_in, b.check_out]
+        );
+
+        // 7. Enqueue cancellation outbox event
+        const outboxPayload = {
+          bookingReference: b.booking_reference,
+          hotelName: b.hotel_name,
+          roomName: b.room_name,
+          checkIn: b.check_in,
+          checkOut: b.check_out,
+          nights: b.nights,
+          roomsCount: roomsToRestore,
+          guestName: b.guest_name,
+          guestEmail: b.guest_email,
+          reason,
+          cancelledAt: new Date().toISOString(),
+        };
+
+        await client.query(
+          `INSERT INTO notification_outbox (booking_id, event_type, payload, status)
+           VALUES ($1, 'BOOKING_CANCELLATION', $2::jsonb, 'PENDING');`,
+          [b.id, JSON.stringify(outboxPayload)]
+        );
+
+        await client.query('COMMIT');
+
+        return {
+          bookingReference: b.booking_reference,
+          status: 'CANCELLED',
+          hotelName: b.hotel_name,
+          roomName: b.room_name,
+          checkIn: b.check_in,
+          checkOut: b.check_out,
+          nights: b.nights,
+          roomsCount: roomsToRestore,
+          totalAmount: Number(b.total_amount),
+          cancelledAt: new Date().toISOString(),
+          guest: {
+            fullName: b.guest_name,
+            email: b.guest_email,
+          },
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
+    // ==========================================
+    // IN-MEMORY FALLBACK WITH ASYNC MUTEX
+    // ==========================================
+    const release = await this.mutex.acquire();
+    try {
+      const booking = this.inMemoryBookings.get(bookingReference.trim());
+
+      if (!booking) {
+        throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND], 404);
+      }
+
+      if (booking.guest?.email?.toLowerCase() !== normalizedEmail) {
+        throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND], 404);
+      }
+
+      if (booking.status === 'CANCELLED') {
+        throw new AppError(
+          ERROR_CODES.BOOKING_ALREADY_CANCELLED,
+          ERROR_MESSAGES[ERROR_CODES.BOOKING_ALREADY_CANCELLED],
+          400
+        );
+      }
+
+      // Check cancellation proof
+      const session = this.inMemoryGuestSessions.get(cancellationProof.trim());
+      if (!session || session.bookingId !== booking.id || session.purpose !== 'CANCELLATION') {
+        throw new AppError(
+          ERROR_CODES.INVALID_CANCELLATION_PROOF,
+          ERROR_MESSAGES[ERROR_CODES.INVALID_CANCELLATION_PROOF],
+          400
+        );
+      }
+
+      if (session.consumedAt) {
+        throw new AppError(
+          ERROR_CODES.INVALID_CANCELLATION_PROOF,
+          'This cancellation proof has already been consumed.',
+          400
+        );
+      }
+
+      if (new Date(session.expiresAt).getTime() < Date.now()) {
+        throw new AppError(
+          ERROR_CODES.EXPIRED_CANCELLATION_PROOF,
+          ERROR_MESSAGES[ERROR_CODES.EXPIRED_CANCELLATION_PROOF],
+          400
+        );
+      }
+
+      // Check cancellation cutoff
+      const eligible = isCancellationEligible(booking.checkIn);
+      if (!eligible) {
+        throw new AppError(
+          ERROR_CODES.CANCELLATION_DEADLINE_PASSED,
+          ERROR_MESSAGES[ERROR_CODES.CANCELLATION_DEADLINE_PASSED],
+          400
+        );
+      }
+
+      // Mark proof consumed (single-use)
+      session.consumedAt = new Date().toISOString();
+
+      // Update booking status
+      booking.status = 'CANCELLED';
+      booking.cancelledAt = new Date().toISOString();
+
+      // Restore inventory
+      const stayDates = getStayDates(booking.checkIn, booking.checkOut);
+      for (const date of stayDates) {
+        const currentAvail = roomRepository.getAvailableRoomsForDate(booking.roomTypeId, date, 10);
+        roomRepository.setInventory(booking.roomTypeId, date, currentAvail + booking.roomsCount);
+      }
+
+      // Enqueue outbox
+      this.inMemoryOutbox.push({
+        id: crypto.randomUUID(),
+        bookingId: booking.id,
+        eventType: 'BOOKING_CANCELLATION',
+        payload: {
+          bookingReference: booking.bookingReference,
+          hotelName: booking.hotelName,
+          roomName: booking.roomName,
+          checkIn: booking.checkIn,
+          checkOut: booking.checkOut,
+          nights: booking.nights,
+          roomsCount: booking.roomsCount,
+          guestName: booking.guest?.fullName,
+          guestEmail: booking.guest?.email,
+          reason,
+          cancelledAt: booking.cancelledAt,
+        },
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+      });
+
+      return {
+        bookingReference: booking.bookingReference,
+        status: 'CANCELLED',
+        hotelName: booking.hotelName,
+        roomName: booking.roomName,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        nights: booking.nights,
+        roomsCount: booking.roomsCount,
+        totalAmount: booking.totalAmount,
+        cancelledAt: booking.cancelledAt,
+        guest: booking.guest,
+      };
+    } finally {
+      release();
+    }
   }
 }
 

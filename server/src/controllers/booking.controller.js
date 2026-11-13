@@ -64,12 +64,48 @@ export class BookingController {
   });
 
   /**
-   * POST /api/bookings/:reference/cancellation-otp
+   * GET /api/bookings/my-bookings
+   * Retrieves booking history for authenticated customer with pagination and status filtering
+   */
+  getMyBookings = asyncHandler(async (req, res) => {
+    const customerId = req.customer?.id || req.user?.id;
+    if (!customerId) {
+      throw new AppError(ERROR_CODES.UNAUTHORIZED, 'Authentication required to access booking history.', 401);
+    }
+
+    const { page, limit, status } = req.query;
+
+    const result = await bookingService.getCustomerBookings({
+      customerId,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 10,
+      status: status ? status.toUpperCase() : null,
+    });
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      data: result.bookings,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    });
+  });
+
+  /**
+   * POST /api/bookings/cancellation/send-otp and POST /api/bookings/:reference/cancellation-otp
    * Dispatches an OTP to guest email for cancellation verification
    */
   requestCancellationOtp = asyncHandler(async (req, res) => {
-    const { reference } = req.params;
-    const result = await bookingService.requestCancellationOtp(reference);
+    const bookingReference = req.params.reference || req.body.bookingReference;
+    const email = req.body.email || req.customer?.email;
+
+    const result = await bookingService.requestCancellationOtp({
+      bookingReference,
+      email,
+    });
 
     return sendSuccess(res, {
       statusCode: 200,
@@ -78,16 +114,42 @@ export class BookingController {
   });
 
   /**
-   * POST /api/bookings/:reference/cancel
-   * Cancels a booking upon OTP verification
+   * POST /api/bookings/cancellation/verify-otp
+   * Verifies OTP and generates short-lived, booking-scoped cancellation proof token
+   */
+  verifyCancellationOtp = asyncHandler(async (req, res) => {
+    const bookingReference = req.body.bookingReference || req.params.reference;
+    const email = req.body.email || req.customer?.email;
+    const otp = req.body.otp || req.body.cancellationOtp;
+
+    const result = await bookingService.verifyCancellationOtp({
+      bookingReference,
+      email,
+      otp,
+    });
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      data: result,
+      message: 'Cancellation authorization proof generated successfully.',
+    });
+  });
+
+  /**
+   * POST /api/bookings/cancellation/cancel and POST /api/bookings/:reference/cancel
+   * Confirms cancellation with single-use cancellation proof, restores inventory atomically
    */
   cancelBooking = asyncHandler(async (req, res) => {
-    const { reference } = req.params;
-    const { cancellationOtp, reason } = req.body;
+    const bookingReference = req.params.reference || req.body.bookingReference;
+    const email = req.body.email || req.customer?.email;
+    const cancellationProof =
+      req.body.cancellationProof || req.body.cancellationToken || req.body.cancellationOtp;
+    const { reason } = req.body;
 
     const result = await bookingService.cancelBooking({
-      bookingReference: reference,
-      cancellationOtp,
+      bookingReference,
+      email,
+      cancellationProof,
       reason,
     });
 

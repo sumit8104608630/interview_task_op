@@ -54,6 +54,26 @@ export const lookupBookingBodySchema = z.object({
 });
 
 /**
+ * Validation schema for customer booking history query parameters
+ */
+export const myBookingsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1).optional(),
+  limit: z.coerce.number().int().positive().max(100).default(10).optional(),
+  status: z.enum(['CONFIRMED', 'CANCELLED', 'confirmed', 'cancelled']).optional(),
+  // Security check: Reject explicit customerId injection in query parameters
+  customerId: z.any().optional(),
+  customer_id: z.any().optional(),
+}).superRefine((data, ctx) => {
+  if (data.customerId !== undefined || data.customer_id !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Supplying customerId in query parameters is forbidden for security. Customer identity is established via authentication session.',
+      path: ['customerId'],
+    });
+  }
+});
+
+/**
  * Validation schema for booking reference parameter
  */
 export const bookingReferenceParamSchema = z.object({
@@ -61,16 +81,41 @@ export const bookingReferenceParamSchema = z.object({
 });
 
 /**
- * Validation schema for booking cancellation request
+ * Validation schema for requesting cancellation OTP
+ */
+export const cancellationSendOtpSchema = z.object({
+  bookingReference: z.string().trim().min(1, 'Booking reference is required').optional(),
+  email: z.string().trim().email('A valid guest email is required').optional(),
+});
+
+/**
+ * Validation schema for verifying cancellation OTP
+ */
+export const cancellationVerifyOtpSchema = z.object({
+  bookingReference: z.string().trim().min(1, 'Booking reference is required').optional(),
+  email: z.string().trim().email('A valid guest email is required').optional(),
+  otp: z.string().trim().min(4, 'Verification OTP is required').optional(),
+  cancellationOtp: z.string().trim().min(4, 'Verification OTP is required').optional(),
+});
+
+/**
+ * Validation schema for booking cancellation confirmation
  */
 export const cancelBookingBodySchema = z.object({
-  cancellationOtp: z.string().trim().min(4, 'Valid cancellation OTP is required'),
+  bookingReference: z.string().trim().min(1, 'Booking reference is required').optional(),
+  email: z.string().trim().email('A valid guest email is required').optional(),
+  cancellationProof: z.string().trim().min(1, 'Cancellation proof token is required').optional(),
+  cancellationToken: z.string().trim().min(1, 'Cancellation proof token is required').optional(),
+  cancellationOtp: z.string().trim().min(1, 'Cancellation proof token is required').optional(),
   reason: z.string().trim().max(500).optional(),
 });
 
 export default {
   createBookingBodySchema,
   lookupBookingBodySchema,
+  myBookingsQuerySchema,
   bookingReferenceParamSchema,
+  cancellationSendOtpSchema,
+  cancellationVerifyOtpSchema,
   cancelBookingBodySchema,
 };
