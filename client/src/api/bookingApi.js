@@ -1,7 +1,7 @@
 import apiClient from './axiosClient';
 
 /**
- * Booking Creation & Management API Service
+ * Booking Creation, Lookup & Cancellation API Service
  */
 export const bookingApi = {
   /**
@@ -49,6 +49,42 @@ export const bookingApi = {
    */
   async getMyBookings(params = {}) {
     return apiClient.get('/bookings/my-bookings', { params });
+  },
+
+  /**
+   * Request an email OTP for booking cancellation
+   * @param {object} payload
+   * @param {string} payload.bookingReference
+   * @param {string} payload.email
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  async sendCancellationOtp(payload) {
+    return apiClient.post('/bookings/cancellation/send-otp', payload);
+  },
+
+  /**
+   * Verify cancellation OTP and receive single-use, short-lived cancellationProof
+   * @param {object} payload
+   * @param {string} payload.bookingReference
+   * @param {string} payload.email
+   * @param {string} payload.otp
+   * @returns {Promise<{ success: boolean, data: { cancellationProof: string, expiresAt: string, bookingReference: string }, message: string }>}
+   */
+  async verifyCancellationOtp(payload) {
+    return apiClient.post('/bookings/cancellation/verify-otp', payload);
+  },
+
+  /**
+   * Confirm booking cancellation using single-use cancellation proof
+   * @param {object} payload
+   * @param {string} payload.bookingReference
+   * @param {string} payload.email
+   * @param {string} payload.cancellationProof
+   * @param {string} [payload.reason]
+   * @returns {Promise<{ success: boolean, data: object, message: string }>}
+   */
+  async cancelBooking(payload) {
+    return apiClient.post('/bookings/cancellation/cancel', payload);
   },
 };
 
