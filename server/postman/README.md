@@ -4,11 +4,12 @@ This directory provides Postman collections and instructions for validating the 
 
 ## Collections in this Directory
 
-1. **`Customer_Authentication.postman_collection.json`**: Complete authentication suite (Email OTP registration/login, Password login, Forgot Password, Reset Password, `/me`, Logout, CSRF enforcement, and session revocation verification).
-2. **`Hotel_Catalogue.postman_collection.json`**: Complete hotel catalogue management suite (Hotels listing with pagination, city/location filters, sorting by price/name, hotel details by UUID/slug, room categories, locations with active hotel counts, and amenities).
-3. **`Hotel_Search_Availability.postman_collection.json`**: Date-wise hotel search and room inventory availability suite (Date range validation, checkout-exclusive inventory, multi-room requests, guest capacity, price/amenities filters, sorting, pagination, and room availability breakdowns).
-4. **`Booking_Creation.postman_collection.json`**: Booking creation and guest checkout suite (Atomic multi-room booking, registered vs guest checkout, server-side decimal pricing, idempotency key deduplication, and booking reference lookup).
-5. **`Booking_Cancellation.postman_collection.json`**: Booking retrieval and secure cancellation suite (Guest lookup, enumeration protection, customer booking history, cancellation OTP verification, single-use scoped proof, and atomic inventory restoration).
+1. **`Hotel_Booking_Portal_Complete.postman_collection.json`**: **Unified master collection** organized into 9 logical folders covering all modules (`Authentication`, `Locations`, `Hotels`, `Room Types`, `Search`, `Availability`, `Booking`, `Booking History`, `Cancellation`).
+2. **`Customer_Authentication.postman_collection.json`**: Complete authentication suite (Email OTP registration/login, Password login, Forgot Password, Reset Password, `/me`, Logout, CSRF enforcement, and session revocation verification).
+3. **`Hotel_Catalogue.postman_collection.json`**: Complete hotel catalogue management suite (Hotels listing with pagination, city/location filters, sorting by price/name, hotel details by UUID/slug, room categories, locations with active hotel counts, and amenities).
+4. **`Hotel_Search_Availability.postman_collection.json`**: Date-wise hotel search and room inventory availability suite (Date range validation, checkout-exclusive inventory, multi-room requests, guest capacity, price/amenities filters, sorting, pagination, and room availability breakdowns).
+5. **`Booking_Creation.postman_collection.json`**: Booking creation and guest checkout suite (Atomic multi-room booking, registered vs guest checkout, server-side decimal pricing, idempotency key deduplication, and booking reference lookup).
+6. **`Booking_Cancellation.postman_collection.json`**: Booking retrieval and secure cancellation suite (Guest lookup, enumeration protection, customer booking history, cancellation OTP verification, single-use scoped proof, and atomic inventory restoration).
 
 ---
 

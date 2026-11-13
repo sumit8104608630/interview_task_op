@@ -431,6 +431,25 @@ OUTBOX_POLL_INTERVAL_MS=3000
 OUTBOX_MAX_ATTEMPTS=5
 ```
 
+### Database Setup & Migrations
+Ensure PostgreSQL is running locally, then execute the versioned migrations in sequential order:
+```bash
+# Execute migrations using psql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/001_create_customers_and_auth_sessions.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/002_add_password_hash_to_customers.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/003_create_hotel_catalogue_tables.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/004_create_room_inventory_table.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/005_create_bookings_and_guests_tables.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/006_create_guest_sessions_table.sql
+psql -U postgres -d hotel_booking_portal -f src/database/migrations/007_update_notification_outbox_table.sql
+```
+
+### Seeding Catalogue Data
+Populate the 100 fictional hotels, 20 locations, 15 amenities, and 100 room categories:
+```bash
+node src/database/seeds/seed.js
+```
+
 ### Running the Application
 ```bash
 # Development mode (with nodemon)
@@ -439,6 +458,43 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (123 tests across 11 suites)
+# Automated test suite (125 tests across 12 suites)
 npm test
 ```
+
+---
+
+## 10. Assignment Verification, AI Usage Disclosure & Known Limitations
+
+### Assignment Requirements Compliance Matrix
+| Required Feature | Assignment Specification | Implementation Detail | Status |
+| :--- | :--- | :--- | :--- |
+| **Sample Hotels** | At least 5 sample hotels | **100 fictional hotels** generated across 20 cities with real Unsplash images | ✅ Exceeded |
+| **Hotel Browsing** | Search and browse hotels | Paginated catalogue listing with city, price, and name sorting | ✅ Complete |
+| **Search by Location & Dates** | Date range and capacity search | Continuous date-wise inventory matching, checkout exclusive $[checkIn, checkOut)$ | ✅ Complete |
+| **Room Availability** | Multi-day availability breakdown | CTE-based query on `room_inventory` without N+1 loops | ✅ Complete |
+| **Room Booking** | Single-room booking capability | Single-room default preserved; multi-room booking supported as backward-compatible enhancement | ✅ Complete |
+| **Guest Details** | Guest name and email required | Mandatory guest name & email; customer account creation is **never** forced | ✅ Complete |
+| **Pricing Calculation** | Server-side total calculation | Computed as $nights \times nightlyPriceSnapshot \times roomsCount$ with exact decimal math | ✅ Complete |
+| **Booking Reference** | Unique human-readable reference | Formatted as `HBP-XXXXXXXX` with cryptographic collision-resistant generator | ✅ Complete |
+| **Booking Retrieval** | Lookup via reference and email | `POST /api/bookings/lookup` with strict anti-enumeration generic 404 | ✅ Complete |
+| **Secure Cancellation** | Cancellation with inventory restore | OTP-verified single-use proof; atomically restores inventory for occupied nights | ✅ Complete |
+| **No Overbooking** | Concurrency control | Row-level locking on inventory (`ORDER BY inventory_date ASC FOR UPDATE`) | ✅ Complete |
+| **Notification Integration** | Email delivery | Transactional Outbox pattern with decoupled background worker & microservice | ✅ Complete |
+| **Documentation** | System design and API docs | Detailed `README.md`, `DESIGN.md`, and complete unified Postman collection | ✅ Complete |
+
+### AI Usage Disclosure
+- **Tooling Used:** Google Antigravity Agent (Gemini 2.5 Flash / Claude 3.5 Sonnet orchestration).
+- **Scope of AI Assistance:** 
+  - Schema migration design and SQL query formulation (specifically CTE availability and row locking patterns).
+  - Test suite generation (unit, integration, concurrency, and end-to-end journey tests).
+  - Code refactoring for clean separation of concerns and defense-in-depth security mitigations.
+- **Human Guidance & Engineering Controls:**
+  - Strict step-by-step review across all 7 architectural phases.
+  - Verification of non-negotiable security boundaries (CSRF, HttpOnly, enumeration mitigation, anti-injection).
+  - Validation of exact business constraints and real microservice API contracts without hallucinated endpoints.
+
+### Development Environment & Limitations
+- **Environment Status:** Tested and verified on **Local Node.js 20+ and PostgreSQL 15+**. No production cloud deployment (e.g. AWS/GCP/Vercel) has been executed for the backend server.
+- **External Notification Provider Semantics:** The deployed microservice at `https://otp-microservise.vercel.app/` does not currently accept an `idempotency-key` header on its `/api/send-email` endpoint. While local outbox processing is strictly idempotent, an unacknowledged network drop during provider SMTP dispatch could theoretically trigger a duplicate email delivery upon worker retry.
+- **Out-of-Scope Modules:** In strict compliance with assignment guidelines, no payment gateway integrations, admin control panels, or mandatory customer registration flows were introduced. Single-room guest bookings remain friction-free.

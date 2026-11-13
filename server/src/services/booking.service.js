@@ -141,6 +141,7 @@ export class BookingService {
         email: booking.guest.email,
         phone: booking.guest.phone,
       },
+      customerId: booking.customerId || null,
       isRegisteredCustomer: Boolean(booking.customerId),
       isExisting: booking.isExisting || false,
     };

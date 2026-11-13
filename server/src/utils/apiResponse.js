@@ -29,11 +29,14 @@ export const sendSuccess = (res, { statusCode = 200, data = null, message, meta 
 export const sendError = (res, { statusCode = 500, code = 'INTERNAL_SERVER_ERROR', message = 'An error occurred', details } = {}) => {
   const payload = {
     success: false,
+    code,
+    message,
     error: {
       code,
       message,
       ...(details && { details }),
     },
+    ...(details && { details }),
     requestId: res.locals?.requestId,
   };
 
