@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { bookingController } from '../controllers/booking.controller.js';
 import { validate } from '../middleware/validate.middleware.js';
+import { optionalAuth } from '../modules/auth/auth.middleware.js';
 import {
   createBookingBodySchema,
   lookupBookingBodySchema,
@@ -11,12 +12,13 @@ import {
 const router = Router();
 
 /**
- * @route   POST /api/v1/bookings
- * @desc    Create a one-room booking with verified guest details
- * @access  Public (Guest booking)
+ * @route   POST /api/bookings and /api/v1/bookings
+ * @desc    Create a booking for registered customer or guest with atomic inventory reservation
+ * @access  Public (supports optional authenticated customer session)
  */
 router.post(
   '/',
+  optionalAuth,
   validate({ body: createBookingBodySchema }),
   bookingController.createBooking
 );

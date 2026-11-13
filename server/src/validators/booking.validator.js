@@ -3,20 +3,47 @@ import { isValidIsoDate } from '../utils/dateUtils.js';
 
 /**
  * Validation schema for booking creation
- * Supports one-room booking with verified guest details
+ * Supports both registered customers and guest checkout with 1 or multiple rooms
  */
-export const createBookingBodySchema = z.object({
-  roomTypeId: z.string().trim().min(1, 'Room type ID is required'),
-  checkIn: z.string().refine(isValidIsoDate, {
-    message: 'checkIn must be a valid date in YYYY-MM-DD format',
-  }),
-  checkOut: z.string().refine(isValidIsoDate, {
-    message: 'checkOut must be a valid date in YYYY-MM-DD format',
-  }),
-  guestName: z.string().trim().min(2, 'Guest name must be at least 2 characters'),
-  guestEmail: z.string().trim().email('A valid email address is required'),
-  otpToken: z.string().trim().min(1, 'OTP verification token is required'),
-});
+export const createBookingBodySchema = z
+  .object({
+    roomTypeId: z.string().trim().min(1, 'Room type ID is required'),
+    checkIn: z.string().refine(isValidIsoDate, {
+      message: 'checkIn must be a valid date in YYYY-MM-DD format',
+    }),
+    checkOut: z.string().refine(isValidIsoDate, {
+      message: 'checkOut must be a valid date in YYYY-MM-DD format',
+    }),
+    rooms: z.coerce.number().int().positive().default(1).optional(),
+    roomsCount: z.coerce.number().int().positive().optional(),
+    guests: z.coerce.number().int().positive().default(1).optional(),
+    guest: z
+      .object({
+        name: z.string().trim().min(2, 'Guest name must be at least 2 characters').optional(),
+        fullName: z.string().trim().min(2, 'Guest full name must be at least 2 characters').optional(),
+        email: z.string().trim().email('Valid guest email is required').optional(),
+        phone: z.string().trim().optional(),
+      })
+      .optional(),
+    guestName: z.string().trim().min(2, 'Guest name must be at least 2 characters').optional(),
+    guestEmail: z.string().trim().email('Valid guest email is required').optional(),
+    guestPhone: z.string().trim().optional(),
+    otp: z.string().trim().optional(),
+    otpToken: z.string().trim().optional(),
+    idempotencyKey: z.string().trim().optional(),
+    // Security check: Reject explicit customerId injection in request body
+    customerId: z.any().optional(),
+    customer_id: z.any().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.customerId !== undefined || data.customer_id !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Supplying customerId in request body is forbidden for security. Customer identity is established via authentication session.',
+        path: ['customerId'],
+      });
+    }
+  });
 
 /**
  * Validation schema for booking lookup using reference code and email

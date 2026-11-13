@@ -46,6 +46,22 @@ export class RoomRepository {
     this.inMemoryInventory.clear();
   }
 
+  /**
+   * Returns current available rooms for a room type and date
+   * @param {string} roomTypeId
+   * @param {string} dateStr
+   * @param {number} [defaultTotalRooms=10]
+   * @returns {number|null} Available rooms or null if missing
+   */
+  getAvailableRoomsForDate(roomTypeId, dateStr, defaultTotalRooms = 10) {
+    const overrideKey = `${roomTypeId}_${dateStr}`;
+    if (this.inMemoryInventory.has(overrideKey)) {
+      const val = this.inMemoryInventory.get(overrideKey);
+      return val === null || val === undefined ? null : val;
+    }
+    return defaultTotalRooms;
+  }
+
   async _usePostgres() {
     if (this.forceInMemory) return false;
     const health = await checkDatabaseConnection();

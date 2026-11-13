@@ -1,0 +1,192 @@
+{
+  "info": {
+    "name": "Hotel Booking Portal - Phase 4: Booking Creation & Guest Checkout",
+    "_postman_id": "d2a8b411-9e8a-4932-841f-6b2d91e847c1",
+    "description": "Production-grade Postman collection for Phase 4: Atomic Booking Creation, Multi-Room Support, Registered vs Guest Checkout, Concurrency, and Idempotency.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "sampleRoomTypeId",
+      "value": "910ae60e-8ef0-5840-a592-5c7d4d69e7b9",
+      "type": "string"
+    },
+    {
+      "key": "checkIn",
+      "value": "2026-12-01",
+      "type": "string"
+    },
+    {
+      "key": "checkOut",
+      "value": "2026-12-04",
+      "type": "string"
+    },
+    {
+      "key": "bookingReference",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Create Guest Booking (1 Room, 3 Nights)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.data && json.data.bookingReference) {",
+              "    pm.collectionVariables.set('bookingReference', json.data.bookingReference);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomTypeId\": \"{{sampleRoomTypeId}}\",\n  \"checkIn\": \"{{checkIn}}\",\n  \"checkOut\": \"{{checkOut}}\",\n  \"rooms\": 1,\n  \"guest\": {\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane.doe@example.com\",\n    \"phone\": \"+919876543210\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings"]
+        },
+        "description": "Creates a guest booking (customerId is NULL). Reserves inventory atomically, calculates server-side pricing, and generates HBP-XXXXXXXX reference."
+      }
+    },
+    {
+      "name": "2. Create Multi-Room Booking (3 Rooms, 2 Nights)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomTypeId\": \"{{sampleRoomTypeId}}\",\n  \"checkIn\": \"2026-12-10\",\n  \"checkOut\": \"2026-12-12\",\n  \"rooms\": 3,\n  \"guest\": {\n    \"name\": \"Group Coordinator\",\n    \"email\": \"group@example.com\",\n    \"phone\": \"+919876543211\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings"]
+        },
+        "description": "Demonstrates multi-room support (rooms_count = 3). Decrements 3 rooms per stay night and calculates total = 2 nights * nightlyRate * 3 rooms."
+      }
+    },
+    {
+      "name": "3. Create Idempotent Booking (Prevents Duplication)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "demo-idemp-key-999" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomTypeId\": \"{{sampleRoomTypeId}}\",\n  \"checkIn\": \"{{checkIn}}\",\n  \"checkOut\": \"{{checkOut}}\",\n  \"rooms\": 1,\n  \"guest\": {\n    \"name\": \"Retry Safe User\",\n    \"email\": \"retry@example.com\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings"]
+        },
+        "description": "Submitting this request multiple times with the same Idempotency-Key returns the existing booking with 200 OK without double-decrementing inventory."
+      }
+    },
+    {
+      "name": "4. Lookup Booking by Reference & Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"jane.doe@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/lookup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "lookup"]
+        },
+        "description": "Retrieves booking details by reference code and matching email. Prevents reference enumeration if email does not match."
+      }
+    },
+    {
+      "name": "5. Error - Customer ID Injection Blocked (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomTypeId\": \"{{sampleRoomTypeId}}\",\n  \"checkIn\": \"{{checkIn}}\",\n  \"checkOut\": \"{{checkOut}}\",\n  \"customerId\": \"00000000-0000-0000-0000-000000000000\",\n  \"guest\": {\n    \"name\": \"Attacker\",\n    \"email\": \"attacker@example.com\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings"]
+        },
+        "description": "Security test: verifies that passing customerId in the request body is blocked with 400 VALIDATION_ERROR."
+      }
+    },
+    {
+      "name": "6. Error - Check-out Before Check-in (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomTypeId\": \"{{sampleRoomTypeId}}\",\n  \"checkIn\": \"2026-12-05\",\n  \"checkOut\": \"2026-12-02\",\n  \"rooms\": 1,\n  \"guest\": {\n    \"name\": \"Test User\",\n    \"email\": \"test@example.com\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings"]
+        },
+        "description": "Validates that invalid stay date ranges return 400 INVALID_DATE_RANGE."
+      }
+    },
+    {
+      "name": "7. Error - Email Mismatch Lookup (404)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingReference\": \"{{bookingReference}}\",\n  \"email\": \"unauthorized@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/lookup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bookings", "lookup"]
+        },
+        "description": "Verifies that lookup returns 404 BOOKING_NOT_FOUND if the email does not match the booking guest."
+      }
+    }
+  ]
+}

@@ -7,6 +7,27 @@ This directory provides Postman collections and instructions for validating the 
 1. **`Customer_Authentication.postman_collection.json`**: Complete authentication suite (Email OTP registration/login, Password login, Forgot Password, Reset Password, `/me`, Logout, CSRF enforcement, and session revocation verification).
 2. **`Hotel_Catalogue.postman_collection.json`**: Complete hotel catalogue management suite (Hotels listing with pagination, city/location filters, sorting by price/name, hotel details by UUID/slug, room categories, locations with active hotel counts, and amenities).
 3. **`Hotel_Search_Availability.postman_collection.json`**: Date-wise hotel search and room inventory availability suite (Date range validation, checkout-exclusive inventory, multi-room requests, guest capacity, price/amenities filters, sorting, pagination, and room availability breakdowns).
+4. **`Booking_Creation.postman_collection.json`**: Booking creation and guest checkout suite (Atomic multi-room booking, registered vs guest checkout, server-side decimal pricing, idempotency key deduplication, and booking reference lookup).
+
+---
+
+## 1. Testing Booking Creation & Checkout in Postman (Phase 4)
+
+Import `Booking_Creation.postman_collection.json` into Postman. Pre-configured variables: `baseUrl`, `sampleRoomTypeId`, `checkIn`, `checkOut`.
+
+### Booking Endpoints
+
+| Step | Request Name | Method | Path | Expected Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Create Guest Booking | `POST` | `/api/bookings` | `201 Created` (Returns `bookingReference` `HBP-XXXXXXXX`, total amount, and guest details) |
+| 2 | Create Multi-Room Booking | `POST` | `/api/bookings` | `201 Created` (`rooms: 3`, reserves 3 rooms each night) |
+| 3 | Idempotent Booking Creation | `POST` | `/api/bookings` (`Idempotency-Key` header) | `201 Created` on first try, `200 OK` on replay with no double decrement |
+| 4 | Lookup Booking by Reference | `POST` | `/api/bookings/lookup` | `200 OK` (Matches reference and guest email) |
+| 5 | Block Customer ID Injection | `POST` | `/api/bookings` (with `customerId` in body) | `400 Bad Request` (`VALIDATION_ERROR`) |
+| 6 | Check-out Before Check-in | `POST` | `/api/bookings` (invalid date range) | `400 Bad Request` (`INVALID_DATE_RANGE`) |
+| 7 | Lookup Email Mismatch | `POST` | `/api/bookings/lookup` (wrong email) | `404 Not Found` (`BOOKING_NOT_FOUND`) |
+
+*All endpoints are also accessible via `/api/v1/bookings` for complete backward and frontend compatibility.*
 
 ---
 

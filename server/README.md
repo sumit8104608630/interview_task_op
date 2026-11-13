@@ -150,12 +150,14 @@ server/
 │       ├── auth.api.test.js            # End-to-end auth API tests (cookie, /me, password, reset)
 │       ├── catalogue.api.test.js       # Phase 2 catalogue API tests (hotels, rooms, locations, amenities)
 │       ├── search.api.test.js          # Phase 3 search & availability API tests (dates, capacity, inventory)
+│       ├── booking.api.test.js         # Phase 4 booking creation, multi-room, concurrency & idempotency
 │       └── health.test.js              # Health-check & core route integration tests
 │
 ├── postman/
 │   ├── Customer_Authentication.postman_collection.json     # Complete Postman test collection
 │   ├── Hotel_Catalogue.postman_collection.json             # Phase 2 Hotel Catalogue Postman collection
 │   ├── Hotel_Search_Availability.postman_collection.json   # Phase 3 Hotel Search & Availability Postman collection
+│   ├── Booking_Creation.postman_collection.json            # Phase 4 Booking Creation & Guest Checkout collection
 │   └── README.md                       # Postman testing guide & collection instructions
 │
 ├── .env.example                        # Environment variable documentation template
@@ -281,7 +283,46 @@ High-performance date-wise room availability search and inventory verification s
 
 ---
 
-## 6. Getting Started
+## 6. Booking Creation and Guest Checkout System (Phase 4)
+
+### Overview
+Enterprise-grade booking engine handling both registered customer sessions and friction-free guest checkouts. Guarantees transactional consistency, row-level concurrency locks, multi-room capacity validation, server-side decimal pricing, idempotency deduplication, and asynchronous confirmation notification dispatch.
+
+### Core Architecture & Invariants
+- **Registered vs. Guest Checkout:**
+  - Registered customers authenticate via HttpOnly JWT session cookie; `customer_id` is assigned from authenticated server session context.
+  - Client request body is strictly forbidden from injecting `customerId` (rejected with 400 `VALIDATION_ERROR`).
+  - Guest customers check out without mandatory account registration; `customer_id` is stored as `NULL` and guest details are preserved in `booking_guests`.
+- **Multi-Room Support:**
+  - Supports booking multiple rooms (`rooms` / `rooms_count`).
+  - Automatically verifies and decrements `rooms_count` from `available_rooms` on every stay night $[checkIn, checkOut)$.
+  - Check-out date is strictly exclusive and does not consume inventory.
+- **Server-Side Decimal Pricing:**
+  - Nightly price snapshot stored at booking time (`nightly_price_snapshot`).
+  - Total calculated as: $nights \times nightlyPriceSnapshot \times roomsCount$.
+  - Uses exact decimal arithmetic to prevent IEEE-754 floating-point errors.
+- **Database Concurrency & Race-Condition Prevention:**
+  - Uses PostgreSQL multi-statement transactions (`BEGIN ... COMMIT ... ROLLBACK`).
+  - Acquires row-level locks on `room_inventory` in consistent sorted order (`ORDER BY inventory_date ASC FOR UPDATE`) to prevent deadlocks and overbooking.
+  - If any date has insufficient rooms or missing inventory, rolls back the entire transaction immediately (zero partial reservations).
+  - Outbox pattern: inserts `BOOKING_CONFIRMATION` event into `notification_outbox` within the same atomic transaction.
+- **Human-Readable Booking Reference:**
+  - Cryptographically secure collision-resistant reference formatted as `HBP-XXXXXXXX` (e.g. `HBP-7K8M9PQ2`) with automated retry loop.
+- **Idempotency & Replay Protection:**
+  - Supports `Idempotency-Key` header or body parameter. Replayed requests return the existing booking with 200 OK without double-decrementing inventory.
+
+### Booking Endpoints
+* **`POST /api/bookings`**
+  - **Payload:** `{ roomTypeId, checkIn, checkOut, rooms, guest: { name, email, phone } }`.
+  - Atomically reserves inventory and creates booking.
+  - Returns `bookingReference`, `totalAmount`, `status`, `nights`, `roomsCount`, and guest details.
+* **`POST /api/bookings/lookup`**
+  - **Payload:** `{ bookingReference, email }`.
+  - Retrieves booking details when reference and email match (prevents enumeration).
+
+---
+
+## 7. Getting Started
 
 ### Installation
 ```bash
@@ -312,6 +353,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (85 tests across 8 suites)
+# Automated test suite (101 tests across 9 suites)
 npm test
 ```

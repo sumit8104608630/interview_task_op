@@ -51,6 +51,7 @@ export const requireAuth = async (req, res, next) => {
 
     // 5. Attach authenticated customer context to request object
     req.customer = customer;
+    req.user = customer;
     req.sessionId = sessionId;
 
     return next();
@@ -72,4 +73,53 @@ export const requireAuth = async (req, res, next) => {
   }
 };
 
-export default requireAuth;
+/**
+ * Optional Authentication Middleware
+ * If auth cookie or Bearer token is provided and valid, attaches req.customer and req.user.
+ * If no token is provided or customer is not authenticated, cleanly sets req.customer = null and continues.
+ */
+export const optionalAuth = async (req, res, next) => {
+  try {
+    let token = req.cookies ? req.cookies[env.cookies.authCookieName] : null;
+
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.slice(7).trim();
+    }
+
+    if (!token) {
+      req.customer = null;
+      req.user = null;
+      return next();
+    }
+
+    const verification = verifyCustomerToken(token);
+    if (!verification.valid) {
+      req.customer = null;
+      req.user = null;
+      return next();
+    }
+
+    const { jti: sessionId, sub: customerId } = verification.payload;
+    const customer = await authService.getCurrentCustomer(sessionId);
+
+    if (customer && customer.id === customerId && customer.status === 'ACTIVE') {
+      req.customer = customer;
+      req.user = customer;
+      req.sessionId = sessionId;
+    } else {
+      req.customer = null;
+      req.user = null;
+    }
+
+    return next();
+  } catch {
+    req.customer = null;
+    req.user = null;
+    return next();
+  }
+};
+
+export default {
+  requireAuth,
+  optionalAuth,
+};
