@@ -99,7 +99,7 @@ export const SearchBar = ({ initialValues = {}, className = '' }) => {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-center">
           {/* 1. Destination Field */}
-          <div className="lg:col-span-4 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
+          <div className="lg:col-span-3 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
             <label className="block text-[10px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1">
               Destination
             </label>
@@ -121,7 +121,7 @@ export const SearchBar = ({ initialValues = {}, className = '' }) => {
           </div>
 
           {/* 2. Check-In Date */}
-          <div className="lg:col-span-2.5 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
+          <div className="lg:col-span-3 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
             <label className="block text-[10px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1">
               Check-In
             </label>
@@ -139,7 +139,7 @@ export const SearchBar = ({ initialValues = {}, className = '' }) => {
           </div>
 
           {/* 3. Check-Out Date */}
-          <div className="lg:col-span-2.5 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
+          <div className="lg:col-span-3 relative border-b sm:border-b-0 sm:border-r border-sand/60 pb-3 sm:pb-0 sm:pr-3">
             <label className="block text-[10px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1">
               Check-Out
             </label>

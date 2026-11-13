@@ -218,11 +218,12 @@ export const RegisterPage = () => {
           {step === 'details' && (
             <form onSubmit={handleSubmitStep1(onStep1Submit)} className="space-y-5">
               <div>
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+                <label htmlFor="reg-fullname" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                   Full Name
                 </label>
                 <div className="relative">
                   <input
+                    id="reg-fullname"
                     type="text"
                     autoComplete="name"
                     placeholder="Lady Eleanor Vance"
@@ -239,11 +240,12 @@ export const RegisterPage = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+                <label htmlFor="reg-email" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
                   <input
+                    id="reg-email"
                     type="email"
                     autoComplete="email"
                     placeholder="eleanor@sanctuary.com"
@@ -286,7 +288,7 @@ export const RegisterPage = () => {
             <form onSubmit={handleSubmitStep2(onStep2Submit)} className="space-y-5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold">
+                  <label htmlFor="reg-otp" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold">
                     6-Digit Verification Code
                   </label>
                   <button
@@ -300,6 +302,7 @@ export const RegisterPage = () => {
                 </div>
                 <div className="relative">
                   <input
+                    id="reg-otp"
                     type="text"
                     maxLength={10}
                     placeholder="123456"
@@ -314,11 +317,12 @@ export const RegisterPage = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+                <label htmlFor="reg-password" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                   Create Password (Min 8 chars, 1 letter, 1 number)
                 </label>
                 <div className="relative">
                   <input
+                    id="reg-password"
                     type="password"
                     autoComplete="new-password"
                     placeholder="••••••••"
@@ -335,11 +339,12 @@ export const RegisterPage = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+                <label htmlFor="reg-confirm-password" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                   Confirm Password
                 </label>
                 <div className="relative">
                   <input
+                    id="reg-confirm-password"
                     type="password"
                     autoComplete="new-password"
                     placeholder="••••••••"

@@ -97,11 +97,12 @@ export const LoginPage = () => {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Email Field */}
             <div>
-              <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+              <label htmlFor="login-email" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                 Email Address
               </label>
               <div className="relative">
                 <input
+                  id="login-email"
                   type="email"
                   autoComplete="email"
                   placeholder="name@example.com"
@@ -118,7 +119,7 @@ export const LoginPage = () => {
             {/* Password Field */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold">
+                <label htmlFor="login-password" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold">
                   Password
                 </label>
                 <Link
@@ -130,6 +131,7 @@ export const LoginPage = () => {
               </div>
               <div className="relative">
                 <input
+                  id="login-password"
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"

@@ -1,0 +1,26 @@
+{
+  "name": "hotel-booking-portal-root",
+  "version": "1.0.0",
+  "description": "Full-Stack Hotel Booking Portal with Concurrency Control & Modern Luxury Hospitality Design",
+  "private": true,
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "test:server": "npm --prefix server test",
+    "lint:server": "npm --prefix server run lint",
+    "seed:server": "npm --prefix server run db:seed"
+  },
+  "keywords": [
+    "hotel-booking",
+    "concurrency-control",
+    "row-level-locks",
+    "transactional-outbox",
+    "react",
+    "redux-toolkit",
+    "tailwind-css",
+    "luxury-hospitality"
+  ],
+  "author": "LuxeStay Engineering",
+  "license": "ISC"
+}

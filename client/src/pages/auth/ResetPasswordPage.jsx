@@ -93,11 +93,12 @@ export const ResetPasswordPage = () => {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Email Field */}
             <div>
-              <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+              <label htmlFor="reset-email" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                 Email Address
               </label>
               <div className="relative">
                 <input
+                  id="reset-email"
                   type="email"
                   autoComplete="email"
                   placeholder="name@example.com"
@@ -113,11 +114,12 @@ export const ResetPasswordPage = () => {
 
             {/* OTP Code */}
             <div>
-              <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+              <label htmlFor="reset-otp" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                 6-Digit Reset Code
               </label>
               <div className="relative">
                 <input
+                  id="reset-otp"
                   type="text"
                   maxLength={10}
                   placeholder="123456"
@@ -133,11 +135,12 @@ export const ResetPasswordPage = () => {
 
             {/* New Password */}
             <div>
-              <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+              <label htmlFor="reset-new-password" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                 New Password (Min 8 chars, 1 letter, 1 number)
               </label>
               <div className="relative">
                 <input
+                  id="reset-new-password"
                   type="password"
                   autoComplete="new-password"
                   placeholder="••••••••"
@@ -155,11 +158,12 @@ export const ResetPasswordPage = () => {
 
             {/* Confirm New Password */}
             <div>
-              <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+              <label htmlFor="reset-confirm-password" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                 Confirm New Password
               </label>
               <div className="relative">
                 <input
+                  id="reset-confirm-password"
                   type="password"
                   autoComplete="new-password"
                   placeholder="••••••••"

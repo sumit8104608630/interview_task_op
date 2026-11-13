@@ -79,8 +79,9 @@ export const FilterSidebar = ({
         <form onSubmit={handleApplyPrice} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-warm-grey uppercase">Min</label>
+              <label htmlFor="filter-min-price" className="text-[10px] text-warm-grey uppercase">Min</label>
               <input
+                id="filter-min-price"
                 type="number"
                 placeholder="₹ Min"
                 value={localMin}
@@ -89,8 +90,9 @@ export const FilterSidebar = ({
               />
             </div>
             <div>
-              <label className="text-[10px] text-warm-grey uppercase">Max</label>
+              <label htmlFor="filter-max-price" className="text-[10px] text-warm-grey uppercase">Max</label>
               <input
+                id="filter-max-price"
                 type="number"
                 placeholder="₹ Max"
                 value={localMax}

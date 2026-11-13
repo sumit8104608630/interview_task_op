@@ -89,11 +89,12 @@ export const ForgotPasswordPage = () => {
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div>
-                <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
+                <label htmlFor="forgot-email" className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
                   Registered Email Address
                 </label>
                 <div className="relative">
                   <input
+                    id="forgot-email"
                     type="email"
                     autoComplete="email"
                     placeholder="name@example.com"
