@@ -5,6 +5,7 @@ import { getStayDates, calculateNights, isCancellationEligible } from '../utils/
 import { AppError } from '../middleware/error.middleware.js';
 import { ERROR_CODES, ERROR_MESSAGES } from '../constants/errorMessages.js';
 import { outboxRepository } from './outbox.repository.js';
+import { devStorage } from '../database/devStorage.js';
 import crypto from 'crypto';
 
 /**
@@ -39,13 +40,31 @@ export class BookingRepository {
     this.inMemoryGuestSessions = new Map();
     this.inMemoryOutbox = [];
     this.mutex = new AsyncMutex();
+    this._loadDevStore();
+  }
+
+  _loadDevStore() {
+    if (this.forceInMemory) return;
+    const bookings = devStorage.getSection('bookings');
+    if (bookings && Array.isArray(bookings)) {
+      for (const b of bookings) {
+        this.inMemoryBookings.set(b.bookingReference, b);
+      }
+    }
+  }
+
+  _persistDevStore() {
+    if (this.forceInMemory) return;
+    devStorage.write('bookings', Array.from(this.inMemoryBookings.values()));
   }
 
   setForceInMemory(flag) {
     this.forceInMemory = flag;
+    devStorage.setDisabled(flag);
     outboxRepository.setForceInMemory(flag);
     if (!flag) {
       this.reset();
+      this._loadDevStore();
     }
   }
 
@@ -469,6 +488,7 @@ export class BookingRepository {
         };
 
         this.inMemoryBookings.set(bookingReference, createdBooking);
+        this._persistDevStore();
 
         if (bookingStatus === 'CONFIRMED') {
           const outboxIdempotencyKey = `${bookingId}:BOOKING_CONFIRMED`;
@@ -1048,6 +1068,7 @@ export class BookingRepository {
       // Update booking status
       booking.status = 'CANCELLED';
       booking.cancelledAt = new Date().toISOString();
+      this._persistDevStore();
 
       // Restore inventory
       const stayDates = getStayDates(booking.checkIn, booking.checkOut);
@@ -1304,6 +1325,7 @@ export class BookingRepository {
 
       b.status = 'CONFIRMED';
       b.updatedAt = new Date().toISOString();
+      this._persistDevStore();
 
       // Update in-memory payment record
       const { paymentRepository } = await import('./payment.repository.js');
@@ -1431,6 +1453,9 @@ export class BookingRepository {
           }
           expiredList.push(b.bookingReference);
         }
+      }
+      if (expiredList.length > 0) {
+        this._persistDevStore();
       }
       return expiredList;
     } finally {

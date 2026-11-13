@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { query, checkDatabaseConnection } from '../../database/connection.js';
+import { devStorage } from '../../database/devStorage.js';
 
 /**
  * Customer and Auth Session Data Access Repository
@@ -11,6 +12,29 @@ export class AuthRepository {
     this.inMemoryCustomers = new Map();
     this.inMemorySessions = new Map();
     this.forceInMemory = false;
+    this._loadDevStore();
+  }
+
+  _loadDevStore() {
+    if (this.forceInMemory) return;
+    const customers = devStorage.getSection('customers');
+    if (customers && Array.isArray(customers)) {
+      for (const c of customers) {
+        this.inMemoryCustomers.set(c.id, c);
+      }
+    }
+    const sessions = devStorage.getSection('sessions');
+    if (sessions && Array.isArray(sessions)) {
+      for (const s of sessions) {
+        this.inMemorySessions.set(s.id, s);
+      }
+    }
+  }
+
+  _persistDevStore() {
+    if (this.forceInMemory) return;
+    devStorage.write('customers', Array.from(this.inMemoryCustomers.values()));
+    devStorage.write('sessions', Array.from(this.inMemorySessions.values()));
   }
 
   /**
@@ -19,9 +43,11 @@ export class AuthRepository {
    */
   setForceInMemory(flag) {
     this.forceInMemory = flag;
+    devStorage.setDisabled(flag);
     if (!flag) {
       this.inMemoryCustomers.clear();
       this.inMemorySessions.clear();
+      this._loadDevStore();
     }
   }
 
@@ -141,6 +167,7 @@ export class AuthRepository {
       updated_at: now,
     };
     this.inMemoryCustomers.set(id, newCustomer);
+    this._persistDevStore();
     return { ...newCustomer };
   }
 
@@ -168,6 +195,7 @@ export class AuthRepository {
     if (customer) {
       customer.password_hash = passwordHash;
       customer.updated_at = now;
+      this._persistDevStore();
       return { ...customer };
     }
     return null;
@@ -196,6 +224,7 @@ export class AuthRepository {
     if (customer) {
       customer.last_login_at = now;
       customer.updated_at = now;
+      this._persistDevStore();
       return { ...customer };
     }
     return null;
@@ -222,6 +251,7 @@ export class AuthRepository {
     const customer = this.inMemoryCustomers.get(customerId);
     if (customer) {
       customer.status = status;
+      this._persistDevStore();
       return { ...customer };
     }
     return null;
@@ -260,6 +290,7 @@ export class AuthRepository {
       created_at: now,
     };
     this.inMemorySessions.set(id, session);
+    this._persistDevStore();
     return { ...session };
   }
 
@@ -355,6 +386,7 @@ export class AuthRepository {
     const session = this.inMemorySessions.get(sessionId);
     if (session && !session.revoked_at) {
       session.revoked_at = now;
+      this._persistDevStore();
       return true;
     }
     return false;
@@ -384,6 +416,9 @@ export class AuthRepository {
         session.revoked_at = now;
         count += 1;
       }
+    }
+    if (count > 0) {
+      this._persistDevStore();
     }
     return count;
   }

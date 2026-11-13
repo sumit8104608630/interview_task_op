@@ -1,5 +1,6 @@
 import { query, checkDatabaseConnection } from '../database/connection.js';
 import crypto from 'crypto';
+import { devStorage } from '../database/devStorage.js';
 
 /**
  * Payment Data Access Repository
@@ -9,10 +10,31 @@ export class PaymentRepository {
   constructor() {
     this._forceInMemory = false;
     this._inMemoryPayments = new Map();
+    this._loadDevStore();
+  }
+
+  _loadDevStore() {
+    if (this._forceInMemory) return;
+    const payments = devStorage.getSection('payments');
+    if (payments && Array.isArray(payments)) {
+      for (const p of payments) {
+        this._inMemoryPayments.set(p.id, p);
+      }
+    }
+  }
+
+  _persistDevStore() {
+    if (this._forceInMemory) return;
+    devStorage.write('payments', Array.from(this._inMemoryPayments.values()));
   }
 
   setForceInMemory(force = true) {
     this._forceInMemory = force;
+    devStorage.setDisabled(force);
+    if (!force) {
+      this.reset();
+      this._loadDevStore();
+    }
   }
 
   reset() {
@@ -94,6 +116,7 @@ export class PaymentRepository {
       failedAt: null,
     };
     this._inMemoryPayments.set(id, record);
+    this._persistDevStore();
     return record;
   }
 
@@ -306,6 +329,7 @@ export class PaymentRepository {
     record.updatedAt = now;
 
     this._inMemoryPayments.set(id, record);
+    this._persistDevStore();
     return { ...record };
   }
 }

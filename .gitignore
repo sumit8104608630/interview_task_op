@@ -41,3 +41,5 @@ temp/
 dist/
 */dist/
 *.pdf
+.dev_fallback_store.json
+*.dev_fallback_store.json
