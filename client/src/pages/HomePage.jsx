@@ -4,6 +4,7 @@ import { hotelApi } from '../api/hotelApi';
 import HotelCard from '../components/hotel/HotelCard';
 import HotelCardSkeleton from '../components/hotel/HotelCardSkeleton';
 import DestinationPills from '../components/hotel/DestinationPills';
+import SearchBar from '../components/search/SearchBar';
 import { Compass, ShieldCheck, Sparkles, ArrowRight, BedDouble } from 'lucide-react';
 
 export const HomePage = () => {
@@ -62,7 +63,7 @@ export const HomePage = () => {
 
   return (
     <div className="w-full">
-      {/* Editorial Hero Section */}
+      {/* Editorial Hero Section with Search Ribbon */}
       <section className="relative overflow-hidden bg-gradient-to-b from-[#f6f3ee] to-surface border-b border-sand/60 py-20 sm:py-28 lg:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-sm bg-white border border-sand mb-6">
@@ -80,10 +81,15 @@ export const HomePage = () => {
             A curated portfolio of architectural retreats, coastal havens, and heritage estates. Impeccable craftsmanship, poised tranquility, and zero compromise.
           </p>
 
+          {/* Interactive Date-Wise Search Bar */}
+          <div className="mt-12 text-left">
+            <SearchBar />
+          </div>
+
           {/* Destination Shortcuts */}
-          <div className="mt-10 max-w-2xl mx-auto">
-            <p className="text-[11px] font-sans uppercase tracking-luxury text-warm-grey mb-3 font-medium">
-              Popular Destinations
+          <div className="mt-8 max-w-3xl mx-auto">
+            <p className="text-[11px] font-sans uppercase tracking-luxury text-warm-grey mb-3 font-medium text-center">
+              Or Explore By Destination
             </p>
             <DestinationPills
               locations={locations}
@@ -91,24 +97,6 @@ export const HomePage = () => {
               onSelectCity={handleSelectCity}
               loading={locationsLoading}
             />
-          </div>
-
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              to="/hotels"
-              className="w-full sm:w-auto px-8 py-3.5 rounded text-xs font-semibold tracking-luxury uppercase bg-charcoal text-surface border border-charcoal hover:bg-champagne hover:border-champagne hover:text-white transition-all duration-300 shadow-sm flex items-center justify-center gap-2 group"
-            >
-              <span>Explore Collection</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-
-            <Link
-              to="/booking/lookup"
-              className="w-full sm:w-auto px-8 py-3.5 rounded text-xs font-semibold tracking-luxury uppercase bg-white border border-sand hover:border-champagne text-charcoal hover:bg-sand/30 transition-all duration-300 flex items-center justify-center gap-2"
-            >
-              <Compass className="w-4 h-4 text-champagne" />
-              <span>Find My Reservation</span>
-            </Link>
           </div>
         </div>
       </section>

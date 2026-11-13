@@ -4,15 +4,20 @@ import Skeleton from 'react-loading-skeleton';
 import { hotelApi } from '../api/hotelApi';
 import ImageGallery from '../components/hotel/ImageGallery';
 import RoomTypeCard from '../components/hotel/RoomTypeCard';
+import RoomAvailabilityQuote from '../components/hotel/RoomAvailabilityQuote';
 import { getLuxuryCategoryBadge } from '../utils/formatters';
 import { getAmenityIcon } from '../utils/amenityIcons';
-import { MapPin, ArrowLeft, ShieldCheck, Compass, AlertCircle } from 'lucide-react';
+import { MapPin, ArrowLeft, ShieldCheck, Compass, AlertCircle, Calendar } from 'lucide-react';
+import { getTodayIsoString, getFutureDateIsoString } from '../utils/dateUtils';
 
 export const HotelDetailPage = () => {
   const { id } = useParams();
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Active suite selected for live quote
+  const [selectedRoomForQuote, setSelectedRoomForQuote] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -25,6 +30,10 @@ export const HotelDetailPage = () => {
         const res = await hotelApi.getHotelById(id);
         if (isMounted && res?.data) {
           setHotel(res.data);
+          const rooms = res.data.roomCategories || res.data.roomTypes || [];
+          if (rooms.length > 0) {
+            setSelectedRoomForQuote(rooms[0]);
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -51,29 +60,14 @@ export const HotelDetailPage = () => {
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-pulse">
-        {/* Breadcrumb Skeleton */}
         <div className="w-48"><Skeleton height={16} baseColor="#f0ede8" highlightColor="#fcf9f4" /></div>
-
-        {/* Title & Location Skeleton */}
         <div className="space-y-3">
           <div className="w-32"><Skeleton height={14} baseColor="#f0ede8" highlightColor="#fcf9f4" /></div>
           <div className="w-3/4 max-w-xl"><Skeleton height={40} baseColor="#f0ede8" highlightColor="#fcf9f4" /></div>
           <div className="w-64"><Skeleton height={16} baseColor="#f0ede8" highlightColor="#fcf9f4" /></div>
         </div>
-
-        {/* Gallery Skeleton */}
         <div className="aspect-[16/9] w-full bg-[#f0ede8] rounded overflow-hidden">
           <Skeleton height="100%" baseColor="#f0ede8" highlightColor="#fcf9f4" borderRadius={4} />
-        </div>
-
-        {/* Content Skeletons */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
-          <div className="md:col-span-2 space-y-4">
-            <Skeleton count={4} height={18} baseColor="#f0ede8" highlightColor="#fcf9f4" />
-          </div>
-          <div className="space-y-4">
-            <Skeleton height={120} baseColor="#f0ede8" highlightColor="#fcf9f4" />
-          </div>
         </div>
       </div>
     );
@@ -229,6 +223,17 @@ export const HotelDetailPage = () => {
           </div>
         </section>
 
+        {/* Live Date-Wise Room Availability Quote Checker */}
+        {selectedRoomForQuote && (
+          <section className="pt-8 border-t border-sand/70">
+            <RoomAvailabilityQuote
+              hotel={hotel}
+              roomType={selectedRoomForQuote}
+              defaultRooms={1}
+            />
+          </section>
+        )}
+
         {/* Room Categories Section */}
         <section className="pt-8 border-t border-sand/70 space-y-8">
           <div>
@@ -258,7 +263,17 @@ export const HotelDetailPage = () => {
           <div className="space-y-6">
             {roomCategories.length > 0 ? (
               roomCategories.map((roomType) => (
-                <RoomTypeCard key={roomType.id} roomType={roomType} hotel={hotel} />
+                <div
+                  key={roomType.id}
+                  onClick={() => setSelectedRoomForQuote(roomType)}
+                  className={`transition-all duration-200 cursor-pointer ${
+                    selectedRoomForQuote?.id === roomType.id
+                      ? 'ring-2 ring-champagne/50 rounded'
+                      : ''
+                  }`}
+                >
+                  <RoomTypeCard roomType={roomType} hotel={hotel} />
+                </div>
               ))
             ) : (
               <div className="p-8 bg-white border border-sand rounded text-center">

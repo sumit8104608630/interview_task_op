@@ -4,6 +4,7 @@ import MainLayout from './components/layout/MainLayout';
 import HomePage from './pages/HomePage';
 import HotelsPage from './pages/HotelsPage';
 import HotelDetailPage from './pages/HotelDetailPage';
+import SearchResultsPage from './pages/SearchResultsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -23,6 +24,14 @@ export const router = createBrowserRouter([
       {
         path: 'hotels/:id',
         element: <HotelDetailPage />,
+      },
+      {
+        path: 'search',
+        element: <SearchResultsPage />,
+      },
+      {
+        path: 'availability',
+        element: <SearchResultsPage />,
       },
       {
         path: 'booking/lookup',
