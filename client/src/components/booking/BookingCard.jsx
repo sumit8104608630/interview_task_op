@@ -55,6 +55,7 @@ export const BookingCard = ({ booking, onCancelSuccess }) => {
       status: 'CANCELLED',
       cancelledAt: updatedData?.cancelledAt || new Date().toISOString(),
     }));
+    setIsCancelModalOpen(false);
     if (onCancelSuccess) {
       onCancelSuccess(updatedData);
     }

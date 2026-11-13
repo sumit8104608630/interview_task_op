@@ -33,7 +33,7 @@ export const Navbar = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full frosted-glass border-b border-sand/70 transition-colors">
+    <header className="sticky top-0 z-40 w-full frosted-glass border-b border-sand/70 transition-colors print:hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         {/* Brand Logo & Editorial Monograph */}
         <Link

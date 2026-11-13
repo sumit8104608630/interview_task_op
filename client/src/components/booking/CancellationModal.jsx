@@ -31,6 +31,17 @@ export const CancellationModal = ({
     defaultValues: { otp: '', reason: '' },
   });
 
+  // Reset internal modal state whenever isOpen toggles
+  useEffect(() => {
+    if (!isOpen) {
+      setStep('prompt');
+      setError('');
+      setLoading(false);
+      setCancellationProof(null);
+      setResendCooldown(0);
+    }
+  }, [isOpen]);
+
   // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -103,7 +114,13 @@ export const CancellationModal = ({
 
       if (res?.success) {
         setCancellationProof(null);
-        onSuccess(res.data);
+        setStep('prompt');
+        if (onSuccess) {
+          onSuccess(res.data);
+        }
+        if (onClose) {
+          onClose();
+        }
       }
     } catch (err) {
       setError(

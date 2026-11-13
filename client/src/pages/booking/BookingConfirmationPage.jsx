@@ -37,21 +37,39 @@ export const BookingConfirmationPage = () => {
   };
 
   return (
-    <div className="w-full pb-28 pt-8">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="w-full pb-28 pt-8 print:p-0 print:m-0">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 print:max-w-none print:px-0 print:space-y-4">
+        {/* Printable Voucher Header - Only visible during print */}
+        <div className="hidden print:flex items-center justify-between pb-4 border-b border-sand">
+          <div>
+            <h1 className="font-serif text-3xl font-bold tracking-tight text-charcoal">LuxeStay</h1>
+            <p className="font-sans text-[10px] tracking-luxury uppercase text-warm-grey font-medium">
+              Official Reservation Voucher & Ledger Receipt
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="font-mono text-xs text-warm-grey block">
+              Printed on {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+            <span className="inline-block px-2.5 py-0.5 mt-1 text-[10px] uppercase font-semibold text-[#38765B] border border-[#38765B] rounded-sm">
+              Confirmed Booking
+            </span>
+          </div>
+        </div>
+
         {/* Confirmed Header Card */}
-        <div className="bg-white border border-sand rounded p-8 sm:p-10 shadow-architectural text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-[#f6f3ee] text-[#38765B] flex items-center justify-center mx-auto border-2 border-sand">
-            <CheckCircle2 className="w-9 h-9" />
+        <div className="bg-white border border-sand rounded p-8 sm:p-10 shadow-architectural text-center space-y-4 print:shadow-none print:border print:border-sand print:p-6 print-avoid-break">
+          <div className="w-16 h-16 rounded-full bg-[#f6f3ee] text-[#38765B] flex items-center justify-center mx-auto border-2 border-sand print:w-12 print:h-12">
+            <CheckCircle2 className="w-9 h-9 print:w-7 print:h-7" />
           </div>
 
           <div>
             <span className="font-sans text-[11px] font-semibold tracking-luxury uppercase text-[#38765B] block mb-1">
               Reservation Guaranteed
             </span>
-            <h1 className="font-serif text-3xl sm:text-5xl text-charcoal tracking-tight">
+            <h2 className="font-serif text-3xl sm:text-5xl text-charcoal tracking-tight print:text-3xl">
               Booking Confirmed
-            </h1>
+            </h2>
             <p className="font-sans text-xs sm:text-sm text-on-surface-variant font-light mt-2 max-w-md mx-auto">
               Your room inventory has been reserved directly on the property ledger. A confirmation notification has been queued for delivery.
             </p>
@@ -59,7 +77,7 @@ export const BookingConfirmationPage = () => {
 
           {/* Reference Badge */}
           <div className="pt-2">
-            <div className="inline-flex items-center gap-3 px-5 py-3 rounded bg-[#f6f3ee] border border-sand">
+            <div className="inline-flex items-center gap-3 px-5 py-3 rounded bg-[#f6f3ee] border border-sand print:bg-white">
               <div>
                 <span className="block text-[10px] uppercase tracking-luxury text-warm-grey">
                   Booking Reference
@@ -70,7 +88,7 @@ export const BookingConfirmationPage = () => {
               </div>
               <button
                 onClick={handleCopy}
-                className="p-2 rounded bg-white border border-sand hover:border-champagne text-charcoal hover:text-champagne transition-colors"
+                className="p-2 rounded bg-white border border-sand hover:border-champagne text-charcoal hover:text-champagne transition-colors print:hidden"
                 title="Copy reference code"
                 aria-label="Copy booking reference"
               >
@@ -78,13 +96,13 @@ export const BookingConfirmationPage = () => {
               </button>
             </div>
             {copied && (
-              <p className="text-[11px] text-[#38765B] font-sans mt-1">Copied to clipboard!</p>
+              <p className="text-[11px] text-[#38765B] font-sans mt-1 print:hidden">Copied to clipboard!</p>
             )}
           </div>
         </div>
 
         {/* Detailed Reservation Summary */}
-        <div className="bg-white border border-sand rounded p-8 sm:p-10 shadow-architectural space-y-6">
+        <div className="bg-white border border-sand rounded p-8 sm:p-10 shadow-architectural space-y-6 print:shadow-none print:border print:border-sand print:p-6 print-avoid-break">
           <div className="flex items-center justify-between pb-4 border-b border-sand/60">
             <h3 className="font-serif text-2xl text-charcoal">Reservation Details</h3>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-sm bg-[#38765B]/10 text-[#38765B] text-xs font-semibold tracking-luxury uppercase border border-[#38765B]/20">
@@ -155,7 +173,7 @@ export const BookingConfirmationPage = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 border-t border-sand/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="pt-4 border-t border-sand/60 flex flex-col sm:flex-row items-center justify-between gap-4 print:hidden">
             <button
               onClick={handlePrint}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded border border-sand bg-white text-xs font-semibold tracking-luxury uppercase text-charcoal hover:border-champagne transition-colors"

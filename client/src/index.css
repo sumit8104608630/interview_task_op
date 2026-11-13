@@ -67,3 +67,33 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #b08d57;
 }
+
+/* Print Stylesheet */
+@media print {
+  header,
+  footer,
+  nav,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #1c1c19 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 12pt;
+  }
+
+  .shadow-architectural {
+    box-shadow: none !important;
+  }
+
+  /* Prevent page break inside cards */
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
