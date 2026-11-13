@@ -6,6 +6,8 @@ import HomePage from './pages/HomePage';
 import HotelsPage from './pages/HotelsPage';
 import HotelDetailPage from './pages/HotelDetailPage';
 import SearchResultsPage from './pages/SearchResultsPage';
+import CheckoutPage from './pages/booking/CheckoutPage';
+import BookingConfirmationPage from './pages/booking/BookingConfirmationPage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
@@ -40,6 +42,25 @@ export const router = createBrowserRouter([
         element: <SearchResultsPage />,
       },
       {
+        path: 'checkout',
+        element: <CheckoutPage />,
+      },
+      {
+        path: 'booking/confirmation/:reference',
+        element: <BookingConfirmationPage />,
+      },
+      {
+        path: 'booking/lookup',
+        element: (
+          <div className="max-w-xl mx-auto px-4 py-20 text-center">
+            <h1 className="font-serif text-3xl text-charcoal mb-4">Find Reservation</h1>
+            <p className="text-sm text-on-surface-variant font-sans">
+              Booking lookup and management interface will be activated in Phase 6.
+            </p>
+          </div>
+        ),
+      },
+      {
         path: 'login',
         element: <LoginPage />,
       },
@@ -54,17 +75,6 @@ export const router = createBrowserRouter([
       {
         path: 'reset-password',
         element: <ResetPasswordPage />,
-      },
-      {
-        path: 'booking/lookup',
-        element: (
-          <div className="max-w-xl mx-auto px-4 py-20 text-center">
-            <h1 className="font-serif text-3xl text-charcoal mb-4">Find Reservation</h1>
-            <p className="text-sm text-on-surface-variant font-sans">
-              Booking lookup and management interface will be activated in Phase 6.
-            </p>
-          </div>
-        ),
       },
       // Protected Account Routes
       {
