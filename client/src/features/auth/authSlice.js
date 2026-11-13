@@ -16,8 +16,10 @@ export const authSlice = createSlice({
   reducers: {
     setCredentials: (state, action) => {
       const { customer, csrfToken } = action.payload;
-      state.customer = customer || null;
-      state.isAuthenticated = !!customer;
+      // Defensively unwrap in case customer is wrapped in { customer: { ... } }
+      const resolvedCustomer = customer?.customer ? customer.customer : customer;
+      state.customer = resolvedCustomer || null;
+      state.isAuthenticated = !!resolvedCustomer;
       state.loading = false;
       state.error = null;
       if (csrfToken) {

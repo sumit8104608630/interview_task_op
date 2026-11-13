@@ -24,9 +24,11 @@ export const MainLayout = () => {
       try {
         const response = await apiClient.get('/auth/me');
         if (isMounted && response?.success && response?.data) {
+          // Backend returns { customer: { ... } } inside response.data
+          const customerData = response.data?.customer || response.data;
           dispatch(
             setCredentials({
-              customer: response.data,
+              customer: customerData,
               csrfToken: response.csrfToken || response.data?.csrfToken || null,
             })
           );
