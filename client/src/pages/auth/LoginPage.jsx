@@ -56,7 +56,9 @@ export const LoginPage = () => {
         );
 
         // Redirect back to intended protected page or hotels
-        const fromPath = location.state?.from?.pathname || '/hotels';
+        const searchParams = new URLSearchParams(location.search);
+        const redirectUrl = searchParams.get('redirect');
+        const fromPath = redirectUrl || location.state?.from?.pathname || '/hotels';
         navigate(fromPath, { replace: true });
       }
     } catch (err) {
@@ -67,6 +69,8 @@ export const LoginPage = () => {
       setSubmitting(false);
     }
   };
+
+  const isSessionExpired = new URLSearchParams(location.search).get('expired') === 'true';
 
   return (
     <div className="min-h-[80vh] flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-surface">
@@ -84,6 +88,16 @@ export const LoginPage = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="bg-white border border-sand rounded p-8 sm:p-10 shadow-architectural space-y-6">
+          {/* Session Expired Notice */}
+          {isSessionExpired && !serverError && (
+            <div className="p-3.5 bg-sand/40 border border-champagne/40 rounded flex items-start gap-3">
+              <ShieldCheck className="w-4 h-4 text-champagne shrink-0 mt-0.5" />
+              <p className="text-xs text-charcoal font-sans leading-relaxed">
+                Your session has expired. Please sign in again to continue where you left off.
+              </p>
+            </div>
+          )}
+
           {/* Server Error Notice */}
           {serverError && (
             <div className="p-3.5 bg-error-container/20 border border-error/30 rounded flex items-start gap-3">

@@ -21,8 +21,9 @@ export const ProtectedRoute = () => {
   }
 
   if (!isAuthenticated) {
-    // Redirect unauthenticated visitor to login, saving original destination
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // Redirect unauthenticated visitor or expired session to login, saving original destination
+    const redirectParam = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?redirect=${redirectParam}`} state={{ from: location }} replace />;
   }
 
   return <Outlet />;

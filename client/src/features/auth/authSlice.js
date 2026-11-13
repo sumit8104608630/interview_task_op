@@ -22,6 +22,9 @@ export const authSlice = createSlice({
       state.isAuthenticated = !!resolvedCustomer;
       state.loading = false;
       state.error = null;
+      if (resolvedCustomer && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('was_authenticated', 'true');
+      }
       if (csrfToken) {
         state.csrfToken = csrfToken;
         setCsrfToken(csrfToken);
@@ -33,6 +36,9 @@ export const authSlice = createSlice({
       state.csrfToken = null;
       state.loading = false;
       state.error = null;
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('was_authenticated');
+      }
       setCsrfToken(null);
     },
     setInitialized: (state, action) => {

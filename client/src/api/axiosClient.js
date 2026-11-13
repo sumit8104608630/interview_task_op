@@ -69,6 +69,52 @@ apiClient.interceptors.response.use(
       raw: error,
     };
 
+    // Auto-redirect to login when customer session has expired or is unauthorized
+    if (status === 401 && typeof window !== 'undefined') {
+      const requestUrl = error.config?.url || '';
+      const isAuthAttempt =
+        requestUrl.includes('/auth/login') ||
+        requestUrl.includes('/auth/verify-otp') ||
+        requestUrl.includes('/auth/send-otp') ||
+        requestUrl.includes('/auth/reset-password');
+
+      if (!isAuthAttempt) {
+        const isMeCheck = requestUrl.includes('/auth/me');
+        const wasLoggedIn =
+          typeof sessionStorage !== 'undefined' &&
+          sessionStorage.getItem('was_authenticated') === 'true';
+
+        const isExplicitSessionExpiry = [
+          'SESSION_EXPIRED',
+          'SESSION_REVOKED_OR_EXPIRED',
+          'INVALID_TOKEN',
+          'SESSION_REVOKED',
+          'TOKEN_SUBJECT_MISMATCH',
+        ].includes(normalizedError.code);
+
+        // If not a silent initial guest /auth/me check, or if user was authenticated, redirect to login
+        if (!isMeCheck || wasLoggedIn || isExplicitSessionExpiry) {
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('was_authenticated');
+          }
+
+          const currentPath = window.location.pathname;
+          const isAlreadyOnAuthPage =
+            currentPath.startsWith('/login') ||
+            currentPath.startsWith('/register') ||
+            currentPath.startsWith('/forgot-password') ||
+            currentPath.startsWith('/reset-password');
+
+          if (!isAlreadyOnAuthPage) {
+            const redirectTarget = encodeURIComponent(
+              window.location.pathname + window.location.search
+            );
+            window.location.href = `/login?redirect=${redirectTarget}&expired=true`;
+          }
+        }
+      }
+    }
+
     return Promise.reject(normalizedError);
   }
 );
