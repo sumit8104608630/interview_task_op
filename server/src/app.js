@@ -26,12 +26,18 @@ export const createApp = () => {
     })
   );
 
-  // 3. CORS configuration with strict origin and credentials
+  // 3. CORS configuration with flexible local development origins and full header support
   app.use(
     cors({
       origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps, curl, or same-origin server-side tests)
         if (!origin) return callback(null, true);
+
+        // In development / local testing, allow any localhost or 127.0.0.1 port (5173, 5174, 3000, etc.)
+        const isLocalDevelopment = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+        if (isLocalDevelopment) {
+          return callback(null, true);
+        }
 
         const allowedOrigins = [
           env.FRONTEND_URL,
@@ -47,8 +53,20 @@ export const createApp = () => {
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-api-key', 'x-csrf-token'],
-      exposedHeaders: ['set-cookie', 'x-request-id'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-request-id',
+        'x-api-key',
+        'x-csrf-token',
+        'Idempotency-Key',
+        'idempotency-key',
+        'X-Idempotency-Key',
+        'x-idempotency-key',
+        'Accept',
+        'X-Requested-With',
+      ],
+      exposedHeaders: ['set-cookie', 'x-request-id', 'x-csrf-token'],
     })
   );
 

@@ -9,8 +9,8 @@ export const setCsrfToken = (token) => {
 
 export const getCsrfToken = () => inMemoryCsrfToken;
 
-// Determine base API URL
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+// Determine base API URL (prefers relative '/api' to leverage Vite's reverse proxy seamlessly)
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 /**
  * Centralized Axios instance configured for cookie-backed authentication,
