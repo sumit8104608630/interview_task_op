@@ -4,6 +4,7 @@ import { generateBookingReference } from '../utils/generateBookingReference.js';
 import { getStayDates, calculateNights, isCancellationEligible } from '../utils/dateUtils.js';
 import { AppError } from '../middleware/error.middleware.js';
 import { ERROR_CODES, ERROR_MESSAGES } from '../constants/errorMessages.js';
+import { outboxRepository } from './outbox.repository.js';
 import crypto from 'crypto';
 
 /**
@@ -42,6 +43,7 @@ export class BookingRepository {
 
   setForceInMemory(flag) {
     this.forceInMemory = flag;
+    outboxRepository.setForceInMemory(flag);
     if (!flag) {
       this.reset();
     }
@@ -52,6 +54,7 @@ export class BookingRepository {
     this.inMemoryGuests.clear();
     this.inMemoryGuestSessions.clear();
     this.inMemoryOutbox = [];
+    outboxRepository.reset();
   }
 
   async _usePostgres() {
@@ -272,26 +275,30 @@ export class BookingRepository {
         const guest = guestRes.rows[0];
 
         // 9. Enqueue Notification Outbox Record
+        const outboxIdempotencyKey = `${booking.id}:BOOKING_CONFIRMED`;
         const outboxPayload = {
           bookingReference: booking.booking_reference,
           hotelName: room.hotel_name,
+          roomCategory: room.name,
           roomName: room.name,
-          checkIn,
-          checkOut,
-          nights,
-          roomsCount,
-          nightlyPriceSnapshot,
-          totalAmount,
-          currency: room.currency || 'INR',
           guestName,
           guestEmail,
           guestPhone,
+          checkIn,
+          checkOut,
+          numberOfRooms: roomsCount,
+          roomsCount,
+          nights,
+          totalAmount: Number(totalAmount),
+          currency: room.currency || 'INR',
+          nightlyPriceSnapshot,
         };
 
         await client.query(
-          `INSERT INTO notification_outbox (booking_id, event_type, payload, status)
-           VALUES ($1, 'BOOKING_CONFIRMATION', $2::jsonb, 'PENDING');`,
-          [booking.id, JSON.stringify(outboxPayload)]
+          `INSERT INTO notification_outbox (booking_id, event_type, idempotency_key, payload, status, next_attempt_at)
+           VALUES ($1, 'BOOKING_CONFIRMED', $2, $3::jsonb, 'PENDING', CURRENT_TIMESTAMP)
+           ON CONFLICT (idempotency_key) DO NOTHING;`,
+          [booking.id, outboxIdempotencyKey, JSON.stringify(outboxPayload)]
         );
 
         await client.query('COMMIT');
@@ -442,27 +449,45 @@ export class BookingRepository {
         };
 
         this.inMemoryBookings.set(bookingReference, createdBooking);
-        this.inMemoryOutbox.push({
+        const outboxIdempotencyKey = `${bookingId}:BOOKING_CONFIRMED`;
+        const outboxPayload = {
+          bookingReference,
+          hotelName: room.hotelName,
+          roomCategory: room.name,
+          roomName: room.name,
+          checkIn,
+          checkOut,
+          nights,
+          numberOfRooms: roomsCount,
+          roomsCount,
+          nightlyPriceSnapshot,
+          totalAmount,
+          currency: room.currency || 'INR',
+          guestName,
+          guestEmail,
+          guestPhone,
+        };
+
+        const outboxRecord = {
           id: crypto.randomUUID(),
           bookingId,
-          eventType: 'BOOKING_CONFIRMATION',
-          payload: {
-            bookingReference,
-            hotelName: room.hotelName,
-            roomName: room.name,
-            checkIn,
-            checkOut,
-            nights,
-            roomsCount,
-            nightlyPriceSnapshot,
-            totalAmount,
-            currency: room.currency || 'INR',
-            guestName,
-            guestEmail,
-            guestPhone,
-          },
+          eventType: 'BOOKING_CONFIRMED',
+          idempotencyKey: outboxIdempotencyKey,
+          payload: outboxPayload,
           status: 'PENDING',
+          attempts: 0,
+          nextAttemptAt: now,
+          lastError: null,
           createdAt: now,
+          sentAt: null,
+        };
+
+        this.inMemoryOutbox.push(outboxRecord);
+        await outboxRepository.createEvent({
+          bookingId,
+          eventType: 'BOOKING_CONFIRMED',
+          idempotencyKey: outboxIdempotencyKey,
+          payload: outboxPayload,
         });
 
         return createdBooking;
@@ -879,24 +904,31 @@ export class BookingRepository {
         );
 
         // 7. Enqueue cancellation outbox event
+        const outboxIdempotencyKey = `${b.id}:BOOKING_CANCELLED`;
+        const nowIso = new Date().toISOString();
         const outboxPayload = {
           bookingReference: b.booking_reference,
           hotelName: b.hotel_name,
+          roomCategory: b.room_name,
           roomName: b.room_name,
+          guestName: b.guest_name,
+          guestEmail: b.guest_email,
+          cancellationTimestamp: nowIso,
+          cancelledAt: nowIso,
+          cancellationStatus: 'CANCELLED',
+          reason,
           checkIn: b.check_in,
           checkOut: b.check_out,
           nights: b.nights,
           roomsCount: roomsToRestore,
-          guestName: b.guest_name,
-          guestEmail: b.guest_email,
-          reason,
-          cancelledAt: new Date().toISOString(),
+          totalAmount: Number(b.total_amount),
         };
 
         await client.query(
-          `INSERT INTO notification_outbox (booking_id, event_type, payload, status)
-           VALUES ($1, 'BOOKING_CANCELLATION', $2::jsonb, 'PENDING');`,
-          [b.id, JSON.stringify(outboxPayload)]
+          `INSERT INTO notification_outbox (booking_id, event_type, idempotency_key, payload, status, next_attempt_at)
+           VALUES ($1, 'BOOKING_CANCELLED', $2, $3::jsonb, 'PENDING', CURRENT_TIMESTAMP)
+           ON CONFLICT (idempotency_key) DO NOTHING;`,
+          [b.id, outboxIdempotencyKey, JSON.stringify(outboxPayload)]
         );
 
         await client.query('COMMIT');
@@ -999,25 +1031,46 @@ export class BookingRepository {
       }
 
       // Enqueue outbox
-      this.inMemoryOutbox.push({
+      const outboxIdempotencyKey = `${booking.id}:BOOKING_CANCELLED`;
+      const nowIso = booking.cancelledAt || new Date().toISOString();
+      const cancellationPayload = {
+        bookingReference: booking.bookingReference,
+        hotelName: booking.hotelName,
+        roomCategory: booking.roomName,
+        roomName: booking.roomName,
+        guestName: booking.guest?.fullName,
+        guestEmail: booking.guest?.email,
+        cancellationTimestamp: nowIso,
+        cancelledAt: nowIso,
+        cancellationStatus: 'CANCELLED',
+        reason,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        nights: booking.nights,
+        roomsCount: booking.roomsCount,
+        totalAmount: booking.totalAmount,
+      };
+
+      const outboxRecord = {
         id: crypto.randomUUID(),
         bookingId: booking.id,
-        eventType: 'BOOKING_CANCELLATION',
-        payload: {
-          bookingReference: booking.bookingReference,
-          hotelName: booking.hotelName,
-          roomName: booking.roomName,
-          checkIn: booking.checkIn,
-          checkOut: booking.checkOut,
-          nights: booking.nights,
-          roomsCount: booking.roomsCount,
-          guestName: booking.guest?.fullName,
-          guestEmail: booking.guest?.email,
-          reason,
-          cancelledAt: booking.cancelledAt,
-        },
+        eventType: 'BOOKING_CANCELLED',
+        idempotencyKey: outboxIdempotencyKey,
+        payload: cancellationPayload,
         status: 'PENDING',
-        createdAt: new Date().toISOString(),
+        attempts: 0,
+        nextAttemptAt: new Date(),
+        lastError: null,
+        createdAt: nowIso,
+        sentAt: null,
+      };
+
+      this.inMemoryOutbox.push(outboxRecord);
+      await outboxRepository.createEvent({
+        bookingId: booking.id,
+        eventType: 'BOOKING_CANCELLED',
+        idempotencyKey: outboxIdempotencyKey,
+        payload: cancellationPayload,
       });
 
       return {

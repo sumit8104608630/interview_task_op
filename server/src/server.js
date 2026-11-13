@@ -2,6 +2,7 @@ import http from 'http';
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { pool, checkDatabaseConnection } from './database/connection.js';
+import { notificationWorker } from './workers/notification.worker.js';
 
 const server = http.createServer(app);
 
@@ -27,6 +28,11 @@ const startServer = async () => {
       console.log(`📡 Health Check:   http://localhost:${env.PORT}/api/health`);
       console.log(`🔗 API Base:       http://localhost:${env.PORT}${env.API_PREFIX}`);
       console.log('====================================================');
+
+      if (env.outboxWorker.enabled && !env.isTest) {
+        notificationWorker.start();
+        console.log(`📨 Notification Outbox worker started (poll: ${env.outboxWorker.pollIntervalMs}ms).`);
+      }
     });
   } catch (error) {
     console.error('[Server Initialization Error]', error);
@@ -43,6 +49,8 @@ const handleGracefulShutdown = (signal) => {
   server.close(async () => {
     console.log('[Server] HTTP server closed.');
     try {
+      await notificationWorker.stop();
+      console.log('[Worker] Notification outbox worker stopped gracefully.');
       await pool.end();
       console.log('[Database] PostgreSQL pool drained and disconnected.');
       process.exit(0);

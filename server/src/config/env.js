@@ -60,6 +60,16 @@ export const env = {
     timeoutMs: parseInt(process.env.NOTIFICATION_SERVICE_TIMEOUT_MS || '10000', 10),
   },
 
+  // Notification Outbox Worker settings
+  outboxWorker: {
+    pollIntervalMs: parseInt(process.env.OUTBOX_POLL_INTERVAL_MS || '3000', 10),
+    batchSize: parseInt(process.env.OUTBOX_BATCH_SIZE || '10', 10),
+    maxAttempts: parseInt(process.env.OUTBOX_MAX_ATTEMPTS || '5', 10),
+    initialBackoffMs: parseInt(process.env.OUTBOX_INITIAL_BACKOFF_MS || '5000', 10),
+    backoffMultiplier: parseFloat(process.env.OUTBOX_BACKOFF_MULTIPLIER || '2.0'),
+    enabled: process.env.OUTBOX_WORKER_ENABLED !== 'false',
+  },
+
   // Cloudinary settings
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',

@@ -372,7 +372,40 @@ Complete retrieval and cancellation engine supporting both authenticated registe
 
 ---
 
-## 8. Getting Started
+## 8. Transactional Notification Outbox and Worker System (Phase 6)
+
+### Overview
+Enterprise-grade asynchronous email notification architecture implementing the Transactional Outbox pattern. Guarantees that notification events (`BOOKING_CONFIRMED`, `BOOKING_CANCELLED`) are persisted atomically within the exact same database transaction as the booking creation or cancellation. A decoupled background worker polls due events using PostgreSQL row-level locks (`FOR UPDATE SKIP LOCKED`), dispatches formatted HTML emails via the external OTP & notification microservice, applies exponential backoff on transient failures, and marks failed records after exceeding max retry limits.
+
+### Core Architecture & Invariants
+- **Atomic Transactional Guarantee:**
+  - Outbox events are inserted into `notification_outbox` *before* the booking or cancellation transaction commits.
+  - If a booking fails or rolls back, zero outbox records are created.
+  - Email sending is NEVER performed synchronously inside HTTP request handlers or booking transactions.
+- **Microservice Integration:**
+  - Microservice base: `https://otp-microservise.vercel.app/`
+  - Uses official `POST /api/send-email` contract with `{ to, subject, html, text }`.
+  - Dispatches rich, accessible responsive email templates containing all required booking and hotel details.
+- **Required Events & Payloads:**
+  - **`BOOKING_CONFIRMED`:** Contains booking reference, hotel name, room category, guest name, check-in, check-out, number of rooms, nights, total amount, and currency.
+  - **`BOOKING_CANCELLED`:** Contains booking reference, hotel name, guest name, cancellation timestamp, and cancellation status (`CANCELLED`).
+- **Concurrent Row-Level Worker Claiming (`FOR UPDATE SKIP LOCKED`):**
+  - Worker queries due pending records (`status = 'PENDING' AND next_attempt_at <= CURRENT_TIMESTAMP`).
+  - Uses `FOR UPDATE SKIP LOCKED` and leases rows by atomically moving `next_attempt_at` into the future.
+  - Multiple worker instances running concurrently claim disjoint partitions without collisions or duplicate deliveries.
+- **Idempotency & Deduplication:**
+  - Enforces database-level idempotency via unique keys formatted as `${booking_id}:${event_type}` (e.g. `b4a20b78-...:BOOKING_CONFIRMED`).
+  - *Provider Delivery Semantics Note:* While our outbox worker guarantees strict at-most-once local processing, the external notification provider's public `/api/send-email` endpoint currently does not accept an idempotency key header. Therefore, in the rare scenario where the external provider transmits the email via SMTP but severs connection before returning an HTTP 200 response, a duplicate email delivery remains a theoretical possibility upon worker retry.
+- **Exponential Backoff & Sanitized Error Logging:**
+  - On delivery failure, increments `attempts` and reschedules `next_attempt_at = now + initialBackoff * (multiplier ^ (attempt - 1)) + jitter`.
+  - Transitions `status = 'FAILED'` after configured max attempts (default: 5).
+  - All errors recorded in `last_error` are stripped of OTPs, Bearer tokens, passwords, and sensitive API keys.
+- **Graceful Lifecycle:**
+  - Supports non-blocking startup and graceful termination (`SIGTERM`/`SIGINT`), draining in-flight email batches before exit.
+
+---
+
+## 9. Getting Started
 
 ### Installation
 ```bash
@@ -393,6 +426,9 @@ DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/hotel_booking_po
 JWT_SECRET=your_super_secret_jwt_key_at_least_32_characters_long
 FRONTEND_ORIGIN=http://localhost:5173
 OTP_SERVICE_BASE_URL=https://otp-microservise.vercel.app
+OUTBOX_WORKER_ENABLED=true
+OUTBOX_POLL_INTERVAL_MS=3000
+OUTBOX_MAX_ATTEMPTS=5
 ```
 
 ### Running the Application
@@ -403,6 +439,6 @@ npm run dev
 # Production mode
 npm start
 
-# Automated test suite (113 tests across 10 suites)
+# Automated test suite (123 tests across 11 suites)
 npm test
 ```
