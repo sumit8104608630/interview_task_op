@@ -77,6 +77,15 @@ export const env = {
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   },
 
+  // Razorpay Payment Gateway (Test Mode / Production)
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+    currency: process.env.RAZORPAY_CURRENCY || 'INR',
+    orderExpiryMinutes: parseInt(process.env.RESERVATION_EXPIRY_MINUTES || '15', 10),
+  },
+
   isProduction: process.env.NODE_ENV === 'production',
   isDevelopment: process.env.NODE_ENV === 'development' || !process.env.NODE_ENV,
   isTest: process.env.NODE_ENV === 'test',

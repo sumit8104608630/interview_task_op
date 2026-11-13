@@ -7,7 +7,9 @@ import { selectDraftBooking, setLastConfirmedBooking, clearDraftBooking } from '
 import { selectCustomer, selectIsAuthenticated } from '../../features/auth/authSlice';
 import { addToast } from '../../features/ui/uiSlice';
 import { bookingApi } from '../../api/bookingApi';
+import { paymentApi } from '../../api/paymentApi';
 import { hotelApi } from '../../api/hotelApi';
+import { loadRazorpayScript } from '../../utils/loadRazorpay';
 import { guestCheckoutSchema } from '../../features/booking/bookingSchemas';
 import { formatCurrency, formatNights } from '../../utils/formatters';
 import {
@@ -31,6 +33,8 @@ import {
   Compass,
   CheckCircle2,
   Lock,
+  CreditCard,
+  RefreshCw,
 } from 'lucide-react';
 
 export const CheckoutPage = () => {
@@ -55,9 +59,13 @@ export const CheckoutPage = () => {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
 
-  // Submission state
+  // Submission & payment state
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
+
+  // Preserved pending booking context (allows retry without duplicate creation)
+  const [pendingBooking, setPendingBooking] = useState(null);
 
   // Stable Idempotency Key for this checkout attempt
   const idempotencyKey = useMemo(() => {
@@ -71,6 +79,7 @@ export const CheckoutPage = () => {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(guestCheckoutSchema),
@@ -138,7 +147,162 @@ export const CheckoutPage = () => {
     };
   }, [draftBooking?.roomType?.id, checkIn, checkOut, rooms]);
 
-  // Submit Final Booking
+  /**
+   * Opens the Razorpay Standard Checkout modal for a pending booking
+   */
+  const initiateRazorpayCheckout = async (targetBookingReference, guestInfo) => {
+    // 1. Ensure Razorpay Checkout script is loaded
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded || !window.Razorpay) {
+      throw new Error('Unable to initialize payment gateway. Please check your internet connection.');
+    }
+
+    // 2. Call backend order creation endpoint
+    const orderRes = await paymentApi.createOrder({
+      bookingReference: targetBookingReference,
+      guestEmail: guestInfo.email,
+    });
+
+    if (!orderRes?.data) {
+      throw new Error('Could not establish secure payment order with gateway.');
+    }
+
+    const orderData = orderRes.data;
+
+    // 3. Configure Razorpay Standard Checkout options
+    return new Promise((resolve, reject) => {
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount, // in paise
+        currency: orderData.currency || 'INR',
+        name: orderData.hotelName || 'LuxeStay Sanctuaries',
+        description: `${orderData.roomName || 'Sanctuary Suite'} (${orderData.bookingReference})`,
+        image: '/favicon.svg',
+        order_id: orderData.razorpayOrderId,
+        prefill: {
+          name: orderData.guestName || guestInfo.name || '',
+          email: orderData.guestEmail || guestInfo.email || '',
+          contact: orderData.guestPhone || guestInfo.phone || '',
+        },
+        notes: {
+          bookingReference: orderData.bookingReference,
+        },
+        theme: {
+          color: '#1a1a1a', // Luxury charcoal brand color
+        },
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+            setVerifying(false);
+            dispatch(
+              addToast({
+                type: 'info',
+                title: 'Payment Incomplete',
+                message:
+                  'Payment window was closed. Your room inventory is held for 15 minutes. You may retry payment below.',
+                duration: 6500,
+              })
+            );
+            resolve({ dismissed: true });
+          },
+        },
+        handler: async (response) => {
+          try {
+            setVerifying(true);
+            setSubmitting(true);
+
+            // Cryptographic server-side verification: never trust frontend alone
+            const verifyRes = await paymentApi.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verifyRes?.data?.status === 'CONFIRMED' || verifyRes?.success) {
+              const confirmedPayload = {
+                bookingReference: orderData.bookingReference,
+                status: 'CONFIRMED',
+                paymentId: response.razorpay_payment_id,
+                totalAmount: orderData.amount / 100,
+                currency: orderData.currency,
+                hotelName: orderData.hotelName,
+                roomName: orderData.roomName,
+                hotel: draftBooking?.hotel,
+                roomType: draftBooking?.roomType,
+                checkIn,
+                checkOut,
+                nights: calculateNights(checkIn, checkOut),
+                roomsCount: rooms,
+                guest: {
+                  fullName: guestInfo.name,
+                  email: guestInfo.email,
+                  phone: guestInfo.phone,
+                },
+              };
+
+              dispatch(setLastConfirmedBooking(confirmedPayload));
+              dispatch(clearDraftBooking());
+
+              dispatch(
+                addToast({
+                  type: 'success',
+                  title: 'Payment Verified & Booking Guaranteed',
+                  message: `Payment ID: ${response.razorpay_payment_id}. Your reservation is confirmed.`,
+                  duration: 7000,
+                })
+              );
+
+              navigate(`/booking/confirmation/${orderData.bookingReference}`, {
+                replace: true,
+              });
+              resolve({ verified: true });
+            } else {
+              throw new Error('Payment verification could not be confirmed by the server.');
+            }
+          } catch (verifyError) {
+            setSubmitting(false);
+            setVerifying(false);
+            setSubmissionError(
+              verifyError.message || 'Payment signature verification failed. Please contact support.'
+            );
+            reject(verifyError);
+          }
+        },
+      };
+
+      const rzpInstance = new window.Razorpay(options);
+
+      rzpInstance.on('payment.failed', (failResponse) => {
+        setSubmitting(false);
+        setVerifying(false);
+        const failMsg =
+          failResponse.error?.description ||
+          failResponse.error?.reason ||
+          'Payment was declined. Your reservation is still held; you may retry with another card or UPI.';
+        setSubmissionError(failMsg);
+        dispatch(
+          addToast({
+            type: 'error',
+            title: 'Payment Declined',
+            message: failMsg,
+            duration: 7000,
+          })
+        );
+        resolve({ failed: true, error: failMsg });
+      });
+
+      rzpInstance.open();
+    });
+  };
+
+  /**
+   * Submit Final Booking:
+   * 1. Create Pending Booking & Reserve Inventory on PostgreSQL
+   * 2. Create Razorpay Order
+   * 3. Open Razorpay Checkout Modal
+   * 4. Verify Server-Side HMAC Signature
+   * 5. Transition to Confirmed & Navigate
+   */
   const onSubmit = async (values) => {
     if (!draftBooking?.roomType?.id) return;
 
@@ -146,40 +310,37 @@ export const CheckoutPage = () => {
       setSubmitting(true);
       setSubmissionError('');
 
-      const payload = {
-        roomTypeId: draftBooking.roomType.id,
-        checkIn,
-        checkOut,
-        rooms,
-        guest: {
-          name: values.guestName.trim(),
-          email: values.guestEmail.trim(),
-          phone: values.guestPhone?.trim() || undefined,
-        },
+      const guestData = {
+        name: values.guestName.trim(),
+        email: values.guestEmail.trim(),
+        phone: values.guestPhone?.trim() || undefined,
       };
 
-      const res = await bookingApi.createBooking(payload, idempotencyKey);
+      let activeBookingRef = pendingBooking?.bookingReference;
 
-      if (res?.success && res?.data) {
-        const confirmedData = res.data;
+      // If no pending booking created yet, create it atomically
+      if (!activeBookingRef) {
+        const payload = {
+          roomTypeId: draftBooking.roomType.id,
+          checkIn,
+          checkOut,
+          rooms,
+          requirePayment: true,
+          guest: guestData,
+        };
 
-        // Save confirmed reservation in Redux
-        dispatch(setLastConfirmedBooking(confirmedData));
-        dispatch(clearDraftBooking());
+        const res = await bookingApi.createBooking(payload, idempotencyKey);
+        if (!res?.success || !res?.data) {
+          throw new Error(res?.message || 'Failed to initialize reservation holding.');
+        }
 
-        dispatch(
-          addToast({
-            type: 'success',
-            title: 'Reservation Confirmed',
-            message: `Reference: ${confirmedData.bookingReference}. A confirmation email has been queued.`,
-            duration: 6000,
-          })
-        );
-
-        navigate(`/booking/confirmation/${confirmedData.bookingReference}`, {
-          replace: true,
-        });
+        const created = res.data;
+        activeBookingRef = created.bookingReference;
+        setPendingBooking(created);
       }
+
+      // Launch Razorpay checkout
+      await initiateRazorpayCheckout(activeBookingRef, guestData);
     } catch (err) {
       if (err.code === 'ROOM_UNAVAILABLE') {
         setSubmissionError(
@@ -187,9 +348,31 @@ export const CheckoutPage = () => {
         );
       } else {
         setSubmissionError(
-          err.message || 'Unable to complete reservation at this time. Please try again.'
+          err.message || 'Unable to proceed to payment at this time. Please retry.'
         );
       }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /**
+   * Retry Payment for existing pending reservation
+   */
+  const handleRetryPayment = async () => {
+    if (!pendingBooking?.bookingReference) return;
+
+    try {
+      setSubmitting(true);
+      setSubmissionError('');
+      const values = getValues();
+      await initiateRazorpayCheckout(pendingBooking.bookingReference, {
+        name: values.guestName || pendingBooking.guest?.fullName,
+        email: values.guestEmail || pendingBooking.guest?.email,
+        phone: values.guestPhone || pendingBooking.guest?.phone,
+      });
+    } catch (err) {
+      setSubmissionError(err.message || 'Payment retry failed.');
     } finally {
       setSubmitting(false);
     }
@@ -205,9 +388,7 @@ export const CheckoutPage = () => {
         <span className="font-sans text-xs uppercase tracking-luxury text-champagne font-semibold mb-1">
           Reservation Checkout
         </span>
-        <h1 className="font-serif text-3xl sm:text-4xl text-charcoal">
-          No Suite Selected
-        </h1>
+        <h1 className="font-serif text-3xl sm:text-4xl text-charcoal">No Suite Selected</h1>
         <p className="font-sans text-sm text-on-surface-variant max-w-md mt-3 leading-relaxed">
           Please explore our boutique collection and select your desired hotel suite before proceeding to reservation checkout.
         </p>
@@ -240,7 +421,7 @@ export const CheckoutPage = () => {
             Sanctuary Checkout
           </h1>
           <p className="font-sans text-xs sm:text-sm text-on-surface-variant font-light mt-1">
-            Review your stay details, provide traveler information, and secure your room with atomic inventory reservation.
+            Review your stay details, provide traveler information, and complete payment via Razorpay to guarantee your reservation.
           </p>
         </div>
       </section>
@@ -278,13 +459,37 @@ export const CheckoutPage = () => {
               )}
             </div>
 
+            {/* Active Pending Reservation Hold Banner */}
+            {pendingBooking && (
+              <div className="p-4 bg-sand/30 border border-sand rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-charcoal">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span>Reservation Held: {pendingBooking.bookingReference}</span>
+                  </div>
+                  <p className="text-[11px] text-warm-grey font-light mt-0.5">
+                    Rooms held in inventory. Complete payment via Razorpay to finalize confirmation.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetryPayment}
+                  disabled={submitting || verifying}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded text-xs font-semibold tracking-luxury uppercase bg-charcoal text-white hover:bg-champagne transition-colors shrink-0 disabled:opacity-60"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${submitting ? 'animate-spin' : ''}`} />
+                  <span>Resume Payment</span>
+                </button>
+              </div>
+            )}
+
             {/* Submission Error Banner */}
             {submissionError && (
               <div className="p-4 bg-error-container/20 border border-error/30 rounded flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-error shrink-0 mt-0.5" />
                 <div>
                   <h5 className="font-serif text-sm font-semibold text-charcoal">
-                    Reservation Could Not Be Created
+                    Payment / Reservation Issue
                   </h5>
                   <p className="text-xs text-on-surface-variant font-sans mt-0.5 leading-relaxed">
                     {submissionError}
@@ -294,11 +499,15 @@ export const CheckoutPage = () => {
             )}
 
             {/* Guest Form */}
-            <form onSubmit={handleSubmit(onSubmit)} id="checkoutForm" className="bg-white border border-sand rounded p-6 sm:p-8 shadow-architectural space-y-6">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              id="checkoutForm"
+              className="bg-white border border-sand rounded p-6 sm:p-8 shadow-architectural space-y-6"
+            >
               <div>
                 <h3 className="font-serif text-xl text-charcoal mb-1">Traveler Details</h3>
                 <p className="font-sans text-xs text-warm-grey font-light">
-                  Primary guest name will be recorded on hotel registration documents.
+                  Primary guest name will be recorded on hotel registration documents and billing invoices.
                 </p>
               </div>
 
@@ -325,7 +534,7 @@ export const CheckoutPage = () => {
               {/* Email Address */}
               <div>
                 <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
-                  Email Address (For Booking Confirmation) *
+                  Email Address (For Booking & Payment Confirmation) *
                 </label>
                 <div className="relative">
                   <input
@@ -353,7 +562,7 @@ export const CheckoutPage = () => {
               {/* Contact Phone Number */}
               <div>
                 <label className="block text-[11px] font-sans uppercase tracking-luxury text-warm-grey font-semibold mb-1.5">
-                  Phone Number (Optional)
+                  Phone Number (For Stay & Payment Concierge)
                 </label>
                 <div className="relative">
                   <input
@@ -370,12 +579,12 @@ export const CheckoutPage = () => {
                 )}
               </div>
 
-              {/* Security & Anti-Overbooking Notice */}
+              {/* Security & Payment Protection Notice */}
               <div className="p-4 bg-[#f6f3ee] rounded flex items-start gap-3 border border-sand/60">
                 <ShieldCheck className="w-5 h-5 text-[#38765B] shrink-0 mt-0.5" />
                 <div className="text-xs text-on-surface-variant font-light leading-relaxed">
-                  <span className="font-semibold text-charcoal block">Instant Atomic Reservation</span>
-                  Upon clicking submit, room inventory will be reserved directly on PostgreSQL using row-level locking. No duplicate bookings or ghost holds.
+                  <span className="font-semibold text-charcoal block">Razorpay Standard Checkout (Test Mode)</span>
+                  Your booking inventory is atomically held on PostgreSQL for 15 minutes while payment is completed. Cards, UPI, NetBanking, and Wallets supported.
                 </div>
               </div>
             </form>
@@ -387,9 +596,7 @@ export const CheckoutPage = () => {
               <span className="font-sans text-[11px] uppercase tracking-luxury text-champagne font-semibold block mb-1">
                 Stay Itinerary
               </span>
-              <h3 className="font-serif text-2xl text-charcoal">
-                {draftBooking.hotel.name}
-              </h3>
+              <h3 className="font-serif text-2xl text-charcoal">{draftBooking.hotel.name}</h3>
               <div className="flex items-center gap-1.5 text-xs text-warm-grey mt-1">
                 <MapPin className="w-3.5 h-3.5 text-champagne shrink-0" />
                 <span>{draftBooking.hotel.city || 'India'}</span>
@@ -405,7 +612,8 @@ export const CheckoutPage = () => {
                 {draftBooking.roomType.name}
               </h4>
               <p className="text-xs text-warm-grey">
-                Up to {draftBooking.roomType.maxGuests || 2} Guests per suite · {rooms} {rooms === 1 ? 'Room' : 'Rooms'}
+                Up to {draftBooking.roomType.maxGuests || 2} Guests per suite · {rooms}{' '}
+                {rooms === 1 ? 'Room' : 'Rooms'}
               </p>
             </div>
 
@@ -450,7 +658,7 @@ export const CheckoutPage = () => {
               <div className="pt-3 border-t border-sand flex items-baseline justify-between">
                 <div>
                   <span className="font-serif text-lg text-charcoal font-semibold block">
-                    Total Amount
+                    Total Payable
                   </span>
                   <span className="text-[10px] text-warm-grey font-light">
                     Taxes & sanctuary access included
@@ -473,21 +681,31 @@ export const CheckoutPage = () => {
               <button
                 type="submit"
                 form="checkoutForm"
-                disabled={submitting || quoteLoading || !!quoteError}
+                disabled={submitting || verifying || quoteLoading || !!quoteError}
                 className="w-full py-4 px-6 rounded text-xs font-semibold tracking-luxury uppercase bg-charcoal text-surface hover:bg-champagne hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
               >
-                {submitting ? (
+                {verifying ? (
                   <>
                     <Spinner size={18} color="white" />
-                    <span>Confirming reservation...</span>
+                    <span>Verifying payment with bank...</span>
+                  </>
+                ) : submitting ? (
+                  <>
+                    <Spinner size={18} color="white" />
+                    <span>Connecting to Razorpay...</span>
                   </>
                 ) : (
                   <>
-                    <Lock className="w-4 h-4" />
-                    <span>Confirm & Book Stay</span>
+                    <CreditCard className="w-4 h-4" />
+                    <span>Pay {formatCurrency(totalAmount, currency)} & Confirm</span>
                   </>
                 )}
               </button>
+
+              <div className="flex items-center justify-center gap-2 mt-3 text-[11px] text-warm-grey">
+                <Lock className="w-3.5 h-3.5 text-champagne" />
+                <span>HMAC SHA-256 Verified · 256-Bit SSL Encrypted</span>
+              </div>
             </div>
           </div>
         </div>

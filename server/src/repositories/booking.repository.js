@@ -91,6 +91,8 @@ export class BookingRepository {
     guestPhone = null,
     customerId = null,
     idempotencyKey = null,
+    status = 'CONFIRMED',
+    expiresAt = null,
   }) {
     const stayDates = getStayDates(checkIn, checkOut);
     const nights = stayDates.length;
@@ -241,14 +243,20 @@ export class BookingRepository {
         const nightlyPriceSnapshot = Number((priceInCents / 100).toFixed(2));
         const totalAmount = Number((totalInCents / 100).toFixed(2));
 
+        const bookingStatus = status || 'CONFIRMED';
+        const calculatedExpiresAt =
+          bookingStatus === 'PENDING_PAYMENT'
+            ? (expiresAt ? new Date(expiresAt) : new Date(Date.now() + 15 * 60 * 1000))
+            : null;
+
         // 7. Insert Booking
         const bookingRes = await client.query(
           `INSERT INTO bookings (
              booking_reference, customer_id, room_type_id,
              check_in, check_out, nights, rooms_count,
-             nightly_price_snapshot, total_amount, status, idempotency_key
+             nightly_price_snapshot, total_amount, status, idempotency_key, expires_at
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CONFIRMED', $10)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
            RETURNING *;`,
           [
             bookingReference,
@@ -260,7 +268,9 @@ export class BookingRepository {
             roomsCount,
             nightlyPriceSnapshot,
             totalAmount,
+            bookingStatus,
             idempotencyKey || null,
+            calculatedExpiresAt,
           ]
         );
         const booking = bookingRes.rows[0];
@@ -274,32 +284,34 @@ export class BookingRepository {
         );
         const guest = guestRes.rows[0];
 
-        // 9. Enqueue Notification Outbox Record
-        const outboxIdempotencyKey = `${booking.id}:BOOKING_CONFIRMED`;
-        const outboxPayload = {
-          bookingReference: booking.booking_reference,
-          hotelName: room.hotel_name,
-          roomCategory: room.name,
-          roomName: room.name,
-          guestName,
-          guestEmail,
-          guestPhone,
-          checkIn,
-          checkOut,
-          numberOfRooms: roomsCount,
-          roomsCount,
-          nights,
-          totalAmount: Number(totalAmount),
-          currency: room.currency || 'INR',
-          nightlyPriceSnapshot,
-        };
+        // 9. Enqueue Notification Outbox Record (only for immediately confirmed bookings)
+        if (bookingStatus === 'CONFIRMED') {
+          const outboxIdempotencyKey = `${booking.id}:BOOKING_CONFIRMED`;
+          const outboxPayload = {
+            bookingReference: booking.booking_reference,
+            hotelName: room.hotel_name,
+            roomCategory: room.name,
+            roomName: room.name,
+            guestName,
+            guestEmail,
+            guestPhone,
+            checkIn,
+            checkOut,
+            numberOfRooms: roomsCount,
+            roomsCount,
+            nights,
+            totalAmount: Number(totalAmount),
+            currency: room.currency || 'INR',
+            nightlyPriceSnapshot,
+          };
 
-        await client.query(
-          `INSERT INTO notification_outbox (booking_id, event_type, idempotency_key, payload, status, next_attempt_at)
-           VALUES ($1, 'BOOKING_CONFIRMED', $2, $3::jsonb, 'PENDING', CURRENT_TIMESTAMP)
-           ON CONFLICT (idempotency_key) DO NOTHING;`,
-          [booking.id, outboxIdempotencyKey, JSON.stringify(outboxPayload)]
-        );
+          await client.query(
+            `INSERT INTO notification_outbox (booking_id, event_type, idempotency_key, payload, status, next_attempt_at)
+             VALUES ($1, 'BOOKING_CONFIRMED', $2, $3::jsonb, 'PENDING', CURRENT_TIMESTAMP)
+             ON CONFLICT (idempotency_key) DO NOTHING;`,
+            [booking.id, outboxIdempotencyKey, JSON.stringify(outboxPayload)]
+          );
+        }
 
         await client.query('COMMIT');
 
@@ -317,6 +329,7 @@ export class BookingRepository {
           nightlyPriceSnapshot: Number(booking.nightly_price_snapshot),
           totalAmount: Number(booking.total_amount),
           status: booking.status,
+          expiresAt: booking.expires_at || calculatedExpiresAt,
           createdAt: booking.created_at,
           guest: {
             fullName: guest.full_name,
@@ -422,6 +435,12 @@ export class BookingRepository {
         const guestId = crypto.randomUUID();
         const now = new Date().toISOString();
 
+        const bookingStatus = status || 'CONFIRMED';
+        const calculatedExpiresAt =
+          bookingStatus === 'PENDING_PAYMENT'
+            ? (expiresAt || new Date(Date.now() + 15 * 60 * 1000).toISOString())
+            : null;
+
         const createdBooking = {
           id: bookingId,
           bookingReference,
@@ -436,7 +455,8 @@ export class BookingRepository {
           nightlyPriceSnapshot,
           totalAmount,
           currency: room.currency || 'INR',
-          status: 'CONFIRMED',
+          status: bookingStatus,
+          expiresAt: calculatedExpiresAt,
           idempotencyKey: idempotencyKey || null,
           createdAt: now,
           guest: {
@@ -449,46 +469,49 @@ export class BookingRepository {
         };
 
         this.inMemoryBookings.set(bookingReference, createdBooking);
-        const outboxIdempotencyKey = `${bookingId}:BOOKING_CONFIRMED`;
-        const outboxPayload = {
-          bookingReference,
-          hotelName: room.hotelName,
-          roomCategory: room.name,
-          roomName: room.name,
-          checkIn,
-          checkOut,
-          nights,
-          numberOfRooms: roomsCount,
-          roomsCount,
-          nightlyPriceSnapshot,
-          totalAmount,
-          currency: room.currency || 'INR',
-          guestName,
-          guestEmail,
-          guestPhone,
-        };
 
-        const outboxRecord = {
-          id: crypto.randomUUID(),
-          bookingId,
-          eventType: 'BOOKING_CONFIRMED',
-          idempotencyKey: outboxIdempotencyKey,
-          payload: outboxPayload,
-          status: 'PENDING',
-          attempts: 0,
-          nextAttemptAt: now,
-          lastError: null,
-          createdAt: now,
-          sentAt: null,
-        };
+        if (bookingStatus === 'CONFIRMED') {
+          const outboxIdempotencyKey = `${bookingId}:BOOKING_CONFIRMED`;
+          const outboxPayload = {
+            bookingReference,
+            hotelName: room.hotelName,
+            roomCategory: room.name,
+            roomName: room.name,
+            checkIn,
+            checkOut,
+            nights,
+            numberOfRooms: roomsCount,
+            roomsCount,
+            nightlyPriceSnapshot,
+            totalAmount,
+            currency: room.currency || 'INR',
+            guestName,
+            guestEmail,
+            guestPhone,
+          };
 
-        this.inMemoryOutbox.push(outboxRecord);
-        await outboxRepository.createEvent({
-          bookingId,
-          eventType: 'BOOKING_CONFIRMED',
-          idempotencyKey: outboxIdempotencyKey,
-          payload: outboxPayload,
-        });
+          const outboxRecord = {
+            id: crypto.randomUUID(),
+            bookingId,
+            eventType: 'BOOKING_CONFIRMED',
+            idempotencyKey: outboxIdempotencyKey,
+            payload: outboxPayload,
+            status: 'PENDING',
+            attempts: 0,
+            nextAttemptAt: now,
+            lastError: null,
+            createdAt: now,
+            sentAt: null,
+          };
+
+          this.inMemoryOutbox.push(outboxRecord);
+          await outboxRepository.createEvent({
+            bookingId,
+            eventType: 'BOOKING_CONFIRMED',
+            idempotencyKey: outboxIdempotencyKey,
+            payload: outboxPayload,
+          });
+        }
 
         return createdBooking;
       } catch (rollbackErr) {
@@ -525,6 +548,7 @@ export class BookingRepository {
           b.nightly_price_snapshot AS "nightlyPriceSnapshot",
           b.total_amount AS "totalAmount",
           b.status,
+          b.expires_at AS "expiresAt",
           b.created_at AS "createdAt",
           b.cancelled_at AS "cancelledAt",
           bg.full_name AS "guestName",
@@ -582,6 +606,7 @@ export class BookingRepository {
           b.nightly_price_snapshot AS "nightlyPriceSnapshot",
           b.total_amount AS "totalAmount",
           b.status,
+          b.expires_at AS "expiresAt",
           b.created_at AS "createdAt",
           b.cancelled_at AS "cancelledAt",
           bg.full_name AS "guestName",
@@ -653,6 +678,7 @@ export class BookingRepository {
           b.nightly_price_snapshot AS "nightlyPriceSnapshot",
           b.total_amount AS "totalAmount",
           b.status,
+          b.expires_at AS "expiresAt",
           b.created_at AS "createdAt",
           b.cancelled_at AS "cancelledAt",
           bg.full_name AS "guestName",
@@ -1086,6 +1112,327 @@ export class BookingRepository {
         cancelledAt: booking.cancelledAt,
         guest: booking.guest,
       };
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Atomically confirms a pending booking upon payment verification,
+   * updates payment record status to CAPTURED, and enqueues outbox confirmation notification.
+   *
+   * @param {object} params
+   * @param {string} params.bookingReference
+   * @param {string} [params.paymentId]
+   * @param {string} [params.razorpayOrderId]
+   * @param {string} params.razorpayPaymentId
+   * @param {string} params.razorpaySignature
+   * @param {string} [params.paymentMethod='razorpay']
+   * @returns {Promise<{ booking: object, alreadyConfirmed: boolean }>}
+   */
+  async confirmBookingWithPaymentAtomic({
+    bookingReference,
+    paymentId = null,
+    razorpayOrderId = null,
+    razorpayPaymentId,
+    razorpaySignature,
+    paymentMethod = 'razorpay',
+  }) {
+    if (await this._usePostgres()) {
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        const bookingRes = await client.query(
+          `SELECT b.*, bg.email AS guest_email, bg.full_name AS guest_name, bg.phone AS guest_phone,
+                  rt.name AS room_name, h.name AS hotel_name
+           FROM bookings b
+           JOIN booking_guests bg ON bg.booking_id = b.id
+           JOIN room_types rt ON rt.id = b.room_type_id
+           JOIN hotels h ON h.id = rt.hotel_id
+           WHERE b.booking_reference = $1
+           FOR UPDATE;`,
+          [bookingReference]
+        );
+
+        if (bookingRes.rows.length === 0) {
+          throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, 'Booking not found.', 404);
+        }
+
+        const b = bookingRes.rows[0];
+
+        if (b.status === 'CONFIRMED') {
+          await client.query('COMMIT');
+          return {
+            booking: {
+              ...b,
+              bookingReference: b.booking_reference,
+              totalAmount: Number(b.total_amount),
+              guest: {
+                fullName: b.guest_name,
+                email: b.guest_email,
+                phone: b.guest_phone,
+              },
+              hotelName: b.hotel_name,
+              roomName: b.room_name,
+            },
+            alreadyConfirmed: true,
+          };
+        }
+
+        if (
+          b.status === 'PAYMENT_EXPIRED' ||
+          (b.expires_at && new Date(b.expires_at).getTime() < Date.now())
+        ) {
+          throw new AppError(
+            ERROR_CODES.RESERVATION_EXPIRED,
+            'Reservation has expired. Inventory was released.',
+            400
+          );
+        }
+
+        if (b.status !== 'PENDING_PAYMENT') {
+          throw new AppError(
+            ERROR_CODES.PAYMENT_FAILED,
+            `Cannot confirm booking in status ${b.status}.`,
+            400
+          );
+        }
+
+        // Update booking status
+        const updatedBookingRes = await client.query(
+          `UPDATE bookings
+           SET status = 'CONFIRMED', updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1
+           RETURNING *;`,
+          [b.id]
+        );
+
+        // Update payment status
+        await client.query(
+          `UPDATE payments
+           SET status = 'CAPTURED',
+               razorpay_payment_id = $1,
+               razorpay_signature = $2,
+               payment_method = COALESCE($3, payment_method),
+               captured_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE (id = $4 OR razorpay_order_id = $5);`,
+          [razorpayPaymentId, razorpaySignature, paymentMethod, paymentId, razorpayOrderId]
+        );
+
+        // Enqueue Outbox Notification
+        const outboxIdempotencyKey = `${b.id}:BOOKING_CONFIRMED`;
+        const outboxPayload = {
+          bookingReference: b.booking_reference,
+          hotelName: b.hotel_name,
+          roomCategory: b.room_name,
+          roomName: b.room_name,
+          guestName: b.guest_name,
+          guestEmail: b.guest_email,
+          guestPhone: b.guest_phone,
+          checkIn: b.check_in,
+          checkOut: b.check_out,
+          numberOfRooms: b.rooms_count,
+          roomsCount: b.rooms_count,
+          nights: b.nights,
+          totalAmount: Number(b.total_amount),
+          currency: 'INR',
+          nightlyPriceSnapshot: Number(b.nightly_price_snapshot),
+        };
+
+        await client.query(
+          `INSERT INTO notification_outbox (booking_id, event_type, idempotency_key, payload, status, next_attempt_at)
+           VALUES ($1, 'BOOKING_CONFIRMED', $2, $3::jsonb, 'PENDING', CURRENT_TIMESTAMP)
+           ON CONFLICT (idempotency_key) DO NOTHING;`,
+          [b.id, outboxIdempotencyKey, JSON.stringify(outboxPayload)]
+        );
+
+        await client.query('COMMIT');
+        return {
+          booking: {
+            ...updatedBookingRes.rows[0],
+            bookingReference: b.booking_reference,
+            totalAmount: Number(b.total_amount),
+            guest: {
+              fullName: b.guest_name,
+              email: b.guest_email,
+              phone: b.guest_phone,
+            },
+            hotelName: b.hotel_name,
+            roomName: b.room_name,
+          },
+          alreadyConfirmed: false,
+        };
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    // In-memory fallback
+    const release = await this.mutex.acquire();
+    try {
+      const b = this.inMemoryBookings.get(bookingReference);
+      if (!b) {
+        throw new AppError(ERROR_CODES.BOOKING_NOT_FOUND, 'Booking not found.', 404);
+      }
+
+      if (b.status === 'CONFIRMED') {
+        return { booking: b, alreadyConfirmed: true };
+      }
+
+      if (
+        b.status === 'PAYMENT_EXPIRED' ||
+        (b.expiresAt && new Date(b.expiresAt).getTime() < Date.now())
+      ) {
+        throw new AppError(
+          ERROR_CODES.RESERVATION_EXPIRED,
+          'Reservation has expired. Inventory was released.',
+          400
+        );
+      }
+
+      if (b.status !== 'PENDING_PAYMENT') {
+        throw new AppError(
+          ERROR_CODES.PAYMENT_FAILED,
+          `Cannot confirm booking in status ${b.status}.`,
+          400
+        );
+      }
+
+      b.status = 'CONFIRMED';
+      b.updatedAt = new Date().toISOString();
+
+      // Update in-memory payment record
+      const { paymentRepository } = await import('./payment.repository.js');
+      for (const p of paymentRepository._inMemoryPayments.values()) {
+        if (p.id === paymentId || p.razorpayOrderId === razorpayOrderId) {
+          p.status = 'CAPTURED';
+          p.razorpayPaymentId = razorpayPaymentId;
+          p.razorpaySignature = razorpaySignature;
+          p.capturedAt = new Date();
+          p.updatedAt = new Date();
+          break;
+        }
+      }
+
+      // Enqueue Outbox Notification
+      const outboxIdempotencyKey = `${b.id}:BOOKING_CONFIRMED`;
+      const outboxPayload = {
+        bookingReference: b.bookingReference,
+        hotelName: b.hotelName,
+        roomCategory: b.roomName,
+        roomName: b.roomName,
+        guestName: b.guest?.fullName,
+        guestEmail: b.guest?.email,
+        guestPhone: b.guest?.phone,
+        checkIn: b.checkIn,
+        checkOut: b.checkOut,
+        numberOfRooms: b.roomsCount,
+        roomsCount: b.roomsCount,
+        nights: b.nights,
+        totalAmount: Number(b.totalAmount),
+        currency: b.currency || 'INR',
+        nightlyPriceSnapshot: Number(b.nightlyPriceSnapshot),
+      };
+
+      await outboxRepository.createEvent({
+        bookingId: b.id,
+        eventType: 'BOOKING_CONFIRMED',
+        idempotencyKey: outboxIdempotencyKey,
+        payload: outboxPayload,
+      });
+
+      return { booking: b, alreadyConfirmed: false };
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Periodically called by background worker to release inventory for expired pending bookings.
+   * Restores inventory to room_inventory and marks booking PAYMENT_EXPIRED.
+   *
+   * @returns {Promise<Array<string>>} List of expired booking references
+   */
+  async expirePendingBookingsAtomic() {
+    if (await this._usePostgres()) {
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        const res = await client.query(
+          `SELECT b.id, b.booking_reference, b.room_type_id, b.check_in, b.check_out, b.rooms_count
+           FROM bookings b
+           WHERE b.status = 'PENDING_PAYMENT'
+             AND b.expires_at IS NOT NULL
+             AND b.expires_at < CURRENT_TIMESTAMP
+           FOR UPDATE SKIP LOCKED;`
+        );
+
+        const expiredList = [];
+        for (const row of res.rows) {
+          await client.query(
+            `UPDATE bookings SET status = 'PAYMENT_EXPIRED', updated_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+            [row.id]
+          );
+
+          await client.query(
+            `UPDATE room_inventory
+             SET available_rooms = available_rooms + $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE room_type_id = $2
+               AND inventory_date >= $3::date
+               AND inventory_date < $4::date;`,
+            [row.rooms_count, row.room_type_id, row.check_in, row.check_out]
+          );
+
+          await client.query(
+            `UPDATE payments
+             SET status = 'FAILED', error_code = 'EXPIRED', error_description = 'Reservation expired before payment.', updated_at = CURRENT_TIMESTAMP
+             WHERE booking_id = $1 AND status = 'CREATED';`,
+            [row.id]
+          );
+
+          expiredList.push(row.booking_reference);
+        }
+
+        await client.query('COMMIT');
+        return expiredList;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('[BookingRepository.expirePendingBookingsAtomic] Error expiring bookings:', err.message);
+        return [];
+      } finally {
+        client.release();
+      }
+    }
+
+    // In-memory fallback
+    const release = await this.mutex.acquire();
+    try {
+      const now = Date.now();
+      const expiredList = [];
+      for (const b of this.inMemoryBookings.values()) {
+        if (
+          b.status === 'PENDING_PAYMENT' &&
+          b.expiresAt &&
+          new Date(b.expiresAt).getTime() < now
+        ) {
+          b.status = 'PAYMENT_EXPIRED';
+          b.updatedAt = new Date().toISOString();
+
+          // Restore inventory in roomRepository
+          const stayDates = getStayDates(b.checkIn, b.checkOut);
+          for (const date of stayDates) {
+            const currentAvail = roomRepository.getAvailableRoomsForDate(b.roomTypeId, date, 10);
+            roomRepository.setInventory(b.roomTypeId, date, currentAvail + b.roomsCount);
+          }
+          expiredList.push(b.bookingReference);
+        }
+      }
+      return expiredList;
     } finally {
       release();
     }

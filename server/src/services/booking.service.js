@@ -45,6 +45,9 @@ export class BookingService {
     idempotencyKey = null,
     otp = null,
     otpToken = null,
+    status = null,
+    requirePayment = false,
+    paymentMethod = null,
   }) {
     // 1. Validate stay date interval and policy
     const dateValidation = validateStayDates(checkIn, checkOut, {
@@ -86,7 +89,12 @@ export class BookingService {
       }
     }
 
-    // 4. Atomically Reserve Inventory and Persist Booking
+    // 4. Resolve booking status and Atomically Reserve Inventory
+    const resolvedStatus =
+      requirePayment === true || paymentMethod === 'RAZORPAY' || status === 'PENDING_PAYMENT'
+        ? 'PENDING_PAYMENT'
+        : (status || 'CONFIRMED');
+
     const booking = await bookingRepository.createBookingAtomic({
       roomTypeId: roomTypeId.trim(),
       checkIn,
@@ -98,10 +106,11 @@ export class BookingService {
       guestPhone: finalGuestPhone,
       customerId: customerId || null,
       idempotencyKey: idempotencyKey ? idempotencyKey.trim() : null,
+      status: resolvedStatus,
     });
 
-    // 5. Asynchronously trigger confirmation email (non-blocking)
-    if (!booking.isExisting) {
+    // 5. Asynchronously trigger confirmation email (only for immediately confirmed bookings)
+    if (!booking.isExisting && booking.status === 'CONFIRMED') {
       notificationService
         .sendBookingConfirmationSafe({
           email: finalGuestEmail,
@@ -126,6 +135,7 @@ export class BookingService {
     return {
       bookingReference: booking.bookingReference,
       status: booking.status,
+      expiresAt: booking.expiresAt || null,
       hotelName: booking.hotelName,
       roomName: booking.roomName,
       checkIn: booking.checkIn,

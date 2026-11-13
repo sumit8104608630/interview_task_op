@@ -9,3 +9,4 @@ This directory contains version-controlled SQL migration scripts for PostgreSQL:
 5. **`005_create_bookings_and_guests_tables.sql`**: Bookings table with multi-room support (`rooms_count`), `customer_id` (NULL for guest bookings), booking_guests, and notification_outbox tables.
 6. **`006_create_guest_sessions_table.sql`**: Guest sessions table for short-lived, single-use, booking-scoped authorization proofs (e.g. `CANCELLATION`).
 7. **`007_update_notification_outbox_table.sql`**: Enhances notification_outbox table with `idempotency_key`, `next_attempt_at`, and indexing for safe row-locking worker processing.
+8. **`008_create_payments_and_update_booking_statuses.sql`**: Updates bookings status lifecycle (`PENDING_PAYMENT`, `PAYMENT_FAILED`, `PAYMENT_EXPIRED`), adds `expires_at`, and establishes the `payments` table for Razorpay transactions.

@@ -31,6 +31,9 @@ export const createBookingBodySchema = z
     otp: z.string().trim().optional(),
     otpToken: z.string().trim().optional(),
     idempotencyKey: z.string().trim().optional(),
+    requirePayment: z.boolean().optional(),
+    paymentMethod: z.string().trim().optional(),
+    status: z.enum(['PENDING_PAYMENT', 'CONFIRMED']).optional(),
     // Security check: Reject explicit customerId injection in request body
     customerId: z.any().optional(),
     customer_id: z.any().optional(),
